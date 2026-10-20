@@ -3,6 +3,8 @@
   --text: #e8edf8; --muted: #93a1bf; --accent: #6ea8ff; --accent2: #ff7a45;
   --moon: #b8c6ff; --mars: #ff8752; --ok: #34d399; --warn: #fbbf24; --bad: #f87171;
   --ga: #34d399; --gb: #7dd3fc; --gc: #fbbf24; --gd: #fb923c; --ge: #f87171;
+  /* text versions of the score bands (fills use the --g* colours) */
+  --t-g-a: #34d399; --t-g-b: #7dd3fc; --t-g-c: #fbbf24; --t-g-d: #fb923c; --t-g-e: #f87171; --t-g-none: #94a3b8;
   --radius: 14px; --shadow: 0 10px 30px rgba(0,0,0,.35);
   --on-accent: #07101f;
   --top: 58px; --nav: 0px; --safe-b: env(safe-area-inset-bottom, 0px);
@@ -13,6 +15,8 @@
   --bg: #f4f6fb; --bg2: #e9edf6; --card: #ffffff; --card2: #f3f6fc; --line: #d8deeb;
   --text: #0f172a; --muted: #55627d; --accent: #2563eb; --accent2: #c2410c; --on-accent: #ffffff;
   --moon: #4f5fbf; --mars: #c2410c; --shadow: 0 8px 24px rgba(15,23,42,.10);
+  --ok: #047857; --warn: #b45309; --bad: #b91c1c;
+  --t-g-a: #047857; --t-g-b: #0369a1; --t-g-c: #a16207; --t-g-d: #c2410c; --t-g-e: #b91c1c; --t-g-none: #475569;
   color-scheme: light;
 }
 @media (prefers-color-scheme: light) {
@@ -20,6 +24,8 @@
     --bg: #f4f6fb; --bg2: #e9edf6; --card: #ffffff; --card2: #f3f6fc; --line: #d8deeb;
     --text: #0f172a; --muted: #55627d; --accent: #2563eb; --accent2: #c2410c; --on-accent: #ffffff;
     --moon: #4f5fbf; --mars: #c2410c; --shadow: 0 8px 24px rgba(15,23,42,.10);
+    --ok: #047857; --warn: #b45309; --bad: #b91c1c;
+    --t-g-a: #047857; --t-g-b: #0369a1; --t-g-c: #a16207; --t-g-d: #c2410c; --t-g-e: #b91c1c; --t-g-none: #475569;
     color-scheme: light;
   }
 }
@@ -130,7 +136,7 @@ main { position: fixed; top: calc(var(--top) + 44px + env(safe-area-inset-top, 0
 .gg-t { fill: var(--text); stroke: none; font-size: 26px; font-weight: 800; }
 .g-a .gg-fg { stroke: var(--ga); } .g-b .gg-fg { stroke: var(--gb); } .g-c .gg-fg { stroke: var(--gc); } .g-d .gg-fg { stroke: var(--gd); } .g-e .gg-fg { stroke: var(--ge); }
 .grade { font-weight: 700; font-size: 16px; }
-.g-a .grade { color: var(--ga); } .g-b .grade { color: var(--gb); } .g-c .grade { color: var(--gc); } .g-d .grade { color: var(--gd); } .g-e .grade { color: var(--ge); }
+.g-a .grade { color: var(--t-g-a); } .g-b .grade { color: var(--t-g-b); } .g-c .grade { color: var(--t-g-c); } .g-d .grade { color: var(--t-g-d); } .g-e .grade { color: var(--t-g-e); }
 .subscores { display: flex; gap: 12px; flex-wrap: wrap; font-size: 12.5px; color: var(--muted); margin-top: 4px; }
 .subscores b { color: var(--text); }
 .explain { font-size: 14px; margin: 10px 0 0; }

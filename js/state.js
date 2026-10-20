@@ -74,7 +74,10 @@ export const ago = t => {
   if (s < 86400) return `${Math.round(s / 3600)} h ago`;
   return `${Math.round(s / 86400)} d ago`;
 };
+/** Fill colour for a score (pins, bars, cells). */
 export const scoreColor = s => grade(s).color;
+/** Text colour for a score: a theme-aware CSS variable with readable contrast. */
+export const scoreText = s => `var(--t-${grade(s).cls})`;
 
 // Track which sources answered, for the status card.
 export const health = {};

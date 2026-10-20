@@ -55,6 +55,9 @@ const store = {
 };
 export { store };
 
+// Drop location profiles cached by earlier versions (unversioned "p:" keys).
+try { Object.keys(localStorage).filter(k => k.startsWith('as:p:')).forEach(k => localStorage.removeItem(k)); } catch { /* storage blocked */ }
+
 const num = v => (typeof v === 'number' && isFinite(v) && v > -998 ? v : null);
 export const round = (v, d = 2) => (v == null ? null : Math.round(v * 10 ** d) / 10 ** d);
 
@@ -217,24 +220,33 @@ function annualJaxa(ndvi, lstd, lstn, smc, lc) {
   };
 }
 
-/** Point values from JAXA rasters: a 3x3 sample over ~0.1° for each season month. */
+/** A JAXA request, retried once. A failed request (network or service error) is
+ *  different from a successful one that has no data (polar night, water, ice). */
+const jaxaTry = (k, box, w, h, m) => jaxaGrid(k, box, w, h, m).catch(() => new Promise(r => setTimeout(r, 800)).then(() => jaxaGrid(k, box, w, h, m)));
+
+/**
+ * Point values from JAXA rasters: a 3x3 sample over ~0.1° for each season month.
+ * Every season must be fetched successfully; otherwise the annual means would quietly
+ * depend on which requests failed, so the whole set is rejected and the caller keeps
+ * its previous values.
+ */
 export async function jaxaPoint(lat, lon) {
   const d = 0.05, box = { w: lon - d, e: lon + d, s: lat - d, n: lat + d };
-  const get = (k, m) => jaxaGrid(k, box, 3, 3, m).then(r => median(Array.from(r.data))).catch(() => null);
+  const get = (k, m) => jaxaTry(k, box, 3, 3, m).then(r => median(Array.from(r.data)));
   const seasonal = k => Promise.all(SEASON_MONTHS.map(m => get(k, m)));
   const [ndvi, lstd, lstn, smc, lcArr] = await Promise.all([
     seasonal('NDVI'), seasonal('LSTD'), seasonal('LSTN'), seasonal('SOILM'),
-    jaxaGrid('LC', box, 3, 3, 0).then(r => Array.from(r.data)).catch(() => null),
+    jaxaTry('LC', box, 3, 3, 0).then(r => Array.from(r.data)),
   ]);
-  if (![...ndvi, ...lstd, ...lstn, ...smc].some(v => v != null) && !lcArr) throw new Error('JAXA unavailable');
-  const centre = lcArr && isFinite(lcArr[4]) ? lcArr[4] : lcArr ? median(lcArr) : null;
+  const centre = isFinite(lcArr[4]) ? lcArr[4] : median(lcArr);
   return annualJaxa(ndvi, lstd, lstn, smc, centre);
 }
 
 /** Annual rasters over a scan box, w x h pixels, row 0 = north. */
 export async function jaxaRegion(box, w, h) {
   const layers = ['NDVI', 'LSTD', 'LSTN', 'SOILM'];
-  const grid = (k, m) => jaxaGrid(k, box, w, h, m).then(r => r.data).catch(() => null);
+  // Scans are exploratory: a layer that still fails after a retry is left out (null).
+  const grid = (k, m) => jaxaTry(k, box, w, h, m).then(r => r.data).catch(() => null);
   const [seasonal, lc] = await Promise.all([
     Promise.all(layers.map(k => Promise.all(SEASON_MONTHS.map(m => grid(k, m))))),
     grid('LC', 0),

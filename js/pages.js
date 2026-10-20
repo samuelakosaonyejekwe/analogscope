@@ -1,5 +1,5 @@
 // Rankings, Twin view, Live feeds, Method, and the Discover panel.
-import { state, set, target, site, siteProfile, snapshot, toast, fmt, ago, scoreColor, health, mark } from './state.js';
+import { state, set, target, site, siteProfile, snapshot, toast, fmt, ago, scoreColor, scoreText, health, mark } from './state.js';
 import { SITES } from './sites.js';
 import { TARGETS, VARIABLES, GEOLOGY, MISSIONS, PLANET } from './targets.js';
 import { evaluate } from './engine.js';
@@ -32,7 +32,7 @@ export function renderRank() {
   document.getElementById('rankTable').innerHTML = `<h2 style="font-size:17px;margin:6px 0">Ranked for ${esc(t.name)} · ${esc(MISSIONS[m].label)}</h2>
   <table class="rank"><thead><tr><th>#</th><th>Site</th><th>Score</th><th class="hide-m">Environment</th><th class="hide-m">Geology</th><th class="hide-m">Used by</th></tr></thead><tbody>
   ${rows.map((r, i) => `<tr data-s="${r.s.id}" tabindex="0"><td class="num">${i + 1}</td><td class="site"><b>${esc(r.s.name)}</b><small>${esc(r.s.region)}</small></td>
-    <td><span class="num" style="color:${scoreColor(r.ev?.score)}">${r.ev?.score ?? '–'}</span><div class="bar"><i style="width:${r.ev?.score ?? 0}%;background:${scoreColor(r.ev?.score)}"></i></div></td>
+    <td><span class="num" style="color:${scoreText(r.ev?.score)}">${r.ev?.score ?? '–'}</span><div class="bar"><i style="width:${r.ev?.score ?? 0}%;background:${scoreColor(r.ev?.score)}"></i></div></td>
     <td class="hide-m num">${r.ev?.env.score == null ? '–' : Math.round(r.ev.env.score * 100)}</td><td class="hide-m num">${r.ev?.geo ? Math.round(r.ev.geo.score * 100) : '–'}</td>
     <td class="hide-m"><small class="muted">${esc(r.s.programs)}</small></td></tr>`).join('')}</tbody></table>`;
 
@@ -107,8 +107,8 @@ export function renderTwin(params) {
     <div class="card"><h3>${esc(t.name)} <span class="tag">${t.body === 'moon' ? 'Moon' : 'Mars'}</span></h3><p style="margin:0 0 8px">${esc(t.blurb)}</p>
       <table class="cmp">${Object.entries(t.ref).map(([k, v]) => `<tr><th>${esc(k)}</th><td>${esc(v)}</td></tr>`).join('')}</table>
       <p style="margin:8px 0 0">${t.geo.map(g => `<span class="tag ${s.geo.includes(g) ? 'hit' : ''}">${s.geo.includes(g) ? '✓ ' : ''}${esc(GEOLOGY[g])}</span>`).join('')}</p></div>
-    <div class="card"><h3>${esc(s.name)} <span class="tag" style="color:${scoreColor(ev?.score)}">score ${ev?.score ?? '–'}</span></h3><p style="margin:0 0 8px">${esc(s.note)}</p>
-      <table class="cmp"><tr><th>Factor</th><th>Earth value</th><th>Fit</th></tr>${ev ? ev.env.rows.map(r => `<tr><td>${esc(VARIABLES[r.v].label)}</td><td>${r.x == null ? '–' : fmt(r.x, VARIABLES[r.v].dp) + ' ' + VARIABLES[r.v].unit}</td><td style="color:${scoreColor(r.s == null ? null : r.s * 100)}">${r.s == null ? '–' : Math.round(r.s * 100) + '%'}</td></tr>`).join('') : ''}</table></div>
+    <div class="card"><h3>${esc(s.name)} <span class="tag" style="color:${scoreText(ev?.score)}">score ${ev?.score ?? '–'}</span></h3><p style="margin:0 0 8px">${esc(s.note)}</p>
+      <table class="cmp"><tr><th>Factor</th><th>Earth value</th><th>Fit</th></tr>${ev ? ev.env.rows.map(r => `<tr><td>${esc(VARIABLES[r.v].label)}</td><td>${r.x == null ? '–' : fmt(r.x, VARIABLES[r.v].dp) + ' ' + VARIABLES[r.v].unit}</td><td style="color:${scoreText(r.s == null ? null : r.s * 100)}">${r.s == null ? '–' : Math.round(r.s * 100) + '%'}</td></tr>`).join('') : ''}</table></div>
   </div>
   ${p && ev ? gapsHtml(t, p, ev) : ''}
   <div class="card" id="twinLive"><h3>Live: ${t.body === 'mars' ? 'Mars now vs. this site' : 'this site now'}</h3><div class="skeleton"></div></div>`;
@@ -338,7 +338,7 @@ export function renderScanPanel(el) {
     done: res => {
       el.querySelector('#scanProg').hidden = true;
       el.querySelector('#scanMsg').textContent = `${res.cells.length} land cells scored${res.jaxa ? ' (JAXA/ESA layers included)' : ' (JAXA layers unavailable, so NASA data only)'}.`;
-      el.querySelector('#scanRes').innerHTML = res.candidates.length ? `<div class="card"><h3>Top candidates</h3>${res.candidates.map((c, i) => `<button class="cand" data-lat="${c.lat}" data-lon="${c.lon}"><span class="sc" style="color:${scoreColor(c.score)}">${c.score}</span><span><b>#${i + 1} · ${c.lat.toFixed(2)}°, ${c.lon.toFixed(2)}°</b> ${c.novel ? '<span class="tag novel">NEW</span>' : ''}${c.cave && c.cave !== 'none' ? ` <span class="tag hit">caves ${esc(c.cave)}</span>` : ''}<div class="meta">${c.novel ? `${fmt(c.nearestKm, 0)} km from the nearest documented site (${esc(c.nearest.name)})` : `Near ${esc(c.nearest.name)} (${fmt(c.nearestKm, 0)} km)`}</div></span></button>`).join('')}</div>` : '<div class="card empty">No land cells in this area.</div>';
+      el.querySelector('#scanRes').innerHTML = res.candidates.length ? `<div class="card"><h3>Top candidates</h3>${res.candidates.map((c, i) => `<button class="cand" data-lat="${c.lat}" data-lon="${c.lon}"><span class="sc" style="color:${scoreText(c.score)}">${c.score}</span><span><b>#${i + 1} · ${c.lat.toFixed(2)}°, ${c.lon.toFixed(2)}°</b> ${c.novel ? '<span class="tag novel">NEW</span>' : ''}${c.cave && c.cave !== 'none' ? ` <span class="tag hit">caves ${esc(c.cave)}</span>` : ''}<div class="meta">${c.novel ? `${fmt(c.nearestKm, 0)} km from the nearest documented site (${esc(c.nearest.name)})` : `Near ${esc(c.nearest.name)} (${fmt(c.nearestKm, 0)} km)`}</div></span></button>`).join('')}</div>` : '<div class="card empty">No land cells in this area.</div>';
       el.querySelectorAll('#scanRes .cand').forEach(b => b.onclick = () => set({ sel: { kind: 'point', lat: +b.dataset.lat, lon: +b.dataset.lon } }));
     },
     fail: e => { el.querySelector('#scanProg').hidden = true; el.querySelector('#scanMsg').textContent = `Scan stopped: ${e.message}.${navigator.onLine ? '' : ' Scanning needs an internet connection.'}`; },

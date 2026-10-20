@@ -1,5 +1,5 @@
 // Site report: full characterisation of a documented site or any tapped point.
-import { state, set, target, site, siteProfile, toast, fmt, ago, scoreColor, mark } from './state.js';
+import { state, set, target, site, siteProfile, toast, fmt, ago, scoreColor, scoreText, mark } from './state.js';
 import { TARGETS, VARIABLES, GEOLOGY, MISSIONS, GAPS, PLANET } from './targets.js';
 import { caveEvidence, LEVEL_TEXT } from './evidence.js';
 import { evaluate, rankTargets, monthly, liveScore, explain, grade } from './engine.js';
@@ -71,7 +71,7 @@ function draw(el, place, p) {
   </div>
 
   <div class="card"><h3>Best match by target <span class="muted tag">tap to switch</span></h3>
-    <div class="rows">${all.map(a => `<button class="cand" data-target="${a.target.id}" style="padding:6px 10px;margin:0"><span class="sc" style="color:${scoreColor(a.score)}">${a.score ?? '–'}</span><span><b>${esc(a.target.name)}</b><div class="meta">${a.target.body === 'moon' ? 'Moon' : 'Mars'} · ${esc(a.target.short)}</div></span></button>`).join('')}</div>
+    <div class="rows">${all.map(a => `<button class="cand" data-target="${a.target.id}" style="padding:6px 10px;margin:0"><span class="sc" style="color:${scoreText(a.score)}">${a.score ?? '–'}</span><span><b>${esc(a.target.name)}</b><div class="meta">${a.target.body === 'moon' ? 'Moon' : 'Mars'} · ${esc(a.target.short)}</div></span></button>`).join('')}</div>
   </div>
 
   <div class="card"><h3>Factor fit <span class="tag">${rows.filter(r => r.s != null).length}/${rows.length} measured</span></h3>
@@ -195,7 +195,7 @@ function paintLive(el, place, p, rec, t, cachedAt) {
       <div><small>30-day humidity</small><b>${fmt(mean(s.RH2M), 0)} %</b></div>
     </div>
     <div style="margin-top:10px"><small class="muted">Daily air temperature, last ${n} days (dashed line = long-term normal for this month)</small>${spark(s.T2M, { ref: normT, unit: '°C' })}</div>
-    ${ls?.score != null ? `<p style="margin:8px 0 0;font-size:13.5px">Score using the last 30 days of weather: <b style="color:${scoreColor(ls.score)}">${ls.score}</b> ${d != null ? `<span class="${d >= 0 ? 'delta-up' : 'delta-dn'}">(${d >= 0 ? '+' : ''}${d} vs long-term normal)</span>` : ''}</p>` : ''}`;
+    ${ls?.score != null ? `<p style="margin:8px 0 0;font-size:13.5px">Score using the last 30 days of weather: <b style="color:${scoreText(ls.score)}">${ls.score}</b> ${d != null ? `<span class="${d >= 0 ? 'delta-up' : 'delta-dn'}">(${d >= 0 ? '+' : ''}${d} vs long-term normal)</span>` : ''}</p>` : ''}`;
   const sc = el.querySelector('#liveScore');
   if (sc && ls?.score != null) sc.innerHTML = `<div class="tag ${cachedAt ? 'stale' : 'live'}" style="margin-top:8px">● Score from the last 30 days: ${ls.score}${d != null ? ` (${d >= 0 ? '+' : ''}${d})` : ''}</div>`;
 }
