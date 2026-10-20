@@ -3,26 +3,97 @@
   "name": "AnalogScope – Earth analogs for Moon & Mars",
   "short_name": "AnalogScope",
   "description": "Find, score and compare places on Earth that resemble future Moon and Mars base sites, using live NASA, JAXA, ESA and NOAA data. Works offline.",
-  "start_url": "./#/map",
+  "start_url": "./",
   "scope": "./",
   "display": "standalone",
-  "display_override": ["window-controls-overlay", "standalone", "minimal-ui"],
+  "display_override": [
+    "standalone",
+    "minimal-ui"
+  ],
   "orientation": "any",
   "background_color": "#070b16",
   "theme_color": "#070b16",
   "lang": "en",
   "dir": "ltr",
-  "categories": ["education", "science", "navigation", "utilities"],
+  "categories": [
+    "education",
+    "science",
+    "navigation",
+    "utilities"
+  ],
   "prefer_related_applications": false,
   "icons": [
-    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
-    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
-    { "src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
-    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
   ],
   "shortcuts": [
-    { "name": "Rankings", "url": "./#/rank", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] },
-    { "name": "Live feeds", "url": "./#/live", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] },
-    { "name": "Twin view", "url": "./#/twin", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] }
+    {
+      "name": "Rankings",
+      "url": "./#/rankings",
+      "icons": [
+        {
+          "src": "icons/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "Twin view",
+      "url": "./#/twin",
+      "icons": [
+        {
+          "src": "icons/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "Live feeds",
+      "url": "./#/live",
+      "icons": [
+        {
+          "src": "icons/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "icons/screenshot-wide.png",
+      "sizes": "1400x880",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "Explore map with a site report"
+    },
+    {
+      "src": "icons/screenshot-phone.png",
+      "sizes": "390x844",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Site report on a phone"
+    }
   ]
 }

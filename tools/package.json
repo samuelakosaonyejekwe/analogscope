@@ -1,0 +1,12 @@
+{
+  "name": "analogscope-tools",
+  "private": true,
+  "type": "module",
+  "description": "Build scripts for AnalogScope's bundled data files",
+  "scripts": {
+    "snapshot": "node build_snapshot.mjs"
+  },
+  "devDependencies": {
+    "playwright": "1.49.0"
+  }
+}

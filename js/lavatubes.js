@@ -1,0 +1,32 @@
+// Documented lava-tube caves (public, well-known systems). Coordinates are
+// approximate cave locations; matching uses a 30 km radius.
+
+export const LAVA_TUBES = [
+  { n: 'Kazumura Cave', r: 'Hawaiʻi, USA', lat: 19.53, lon: -155.05 },
+  { n: 'Thurston Lava Tube (Nāhuku)', r: 'Hawaiʻi, USA', lat: 19.414, lon: -155.239 },
+  { n: 'Lava Beds caves', r: 'California, USA', lat: 41.71, lon: -121.51 },
+  { n: 'Ape Cave', r: 'Washington, USA', lat: 46.108, lon: -122.212 },
+  { n: 'Lava River Cave (Newberry)', r: 'Oregon, USA', lat: 43.896, lon: -121.37 },
+  { n: 'Lava River Cave', r: 'Arizona, USA', lat: 35.342, lon: -111.835 },
+  { n: 'Craters of the Moon caves', r: 'Idaho, USA', lat: 43.42, lon: -113.52 },
+  { n: 'El Malpais / Bandera caves', r: 'New Mexico, USA', lat: 34.99, lon: -108.07 },
+  { n: 'Cueva de los Verdes & Jameos', r: 'Lanzarote, Spain', lat: 29.16, lon: -13.44 },
+  { n: 'Cueva del Viento', r: 'Tenerife, Spain', lat: 28.36, lon: -16.7 },
+  { n: 'Raufarhólshellir', r: 'Iceland', lat: 63.94, lon: -21.4 },
+  { n: 'Surtshellir & Víðgelmir', r: 'Iceland', lat: 64.77, lon: -20.75 },
+  { n: 'Undara Lava Tubes', r: 'Queensland, Australia', lat: -18.2, lon: 144.6 },
+  { n: 'Byaduk Caves', r: 'Victoria, Australia', lat: -37.95, lon: 141.95 },
+  { n: 'Manjanggul Cave', r: 'Jeju, South Korea', lat: 33.528, lon: 126.771 },
+  { n: 'Fugaku Wind Cave', r: 'Mount Fuji, Japan', lat: 35.46, lon: 138.63 },
+  { n: 'Leviathan Cave', r: 'Chyulu Hills, Kenya', lat: -2.67, lon: 37.85 },
+  { n: 'Etna lava tubes', r: 'Sicily, Italy', lat: 37.75, lon: 14.99 },
+  { n: 'Algar do Carvão & Gruta do Natal', r: 'Terceira, Azores', lat: 38.73, lon: -27.23 },
+  { n: 'Gruta das Torres', r: 'Pico, Azores', lat: 38.53, lon: -28.5 },
+  { n: 'Umm Jirsan', r: 'Harrat Khaybar, Saudi Arabia', lat: 25.58, lon: 39.47 },
+  { n: 'Harrat al-Shaam tubes', r: 'Jordan', lat: 32.3, lon: 37.2 },
+  { n: 'Santa Cruz lava tubes', r: 'Galápagos, Ecuador', lat: -0.67, lon: -90.33 },
+  { n: 'Mount Suswa caves', r: 'Kenya', lat: -1.15, lon: 36.35 },
+  { n: 'Piton de la Fournaise tubes', r: 'Réunion, France', lat: -21.2, lon: 55.6 },
+  { n: 'Grotte di Monte Nero (Etna)', r: 'Sicily, Italy', lat: 37.79, lon: 15.0 },
+  { n: 'Mauna Loa lava tubes', r: 'Hawaiʻi, USA', lat: 19.6, lon: -155.48 },
+];

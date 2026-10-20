@@ -1,12 +1,17 @@
-// Discovery scan: scores every NASA POWER grid cell (0.5° × 0.625°) inside a box
-// of up to 10° × 10° against a target, using only measured data, to surface
-// candidate analogs that are not yet documented.
+// Discovery scan: scores every NASA POWER grid cell (0.5° lat × 0.625° lon, about
+// 55 km × up to 70 km) inside a box of up to 10° × 10° against a target, using only
+// measured data, to surface candidate analogs that are not yet documented.
 
-import { powerRegional, jaxaRegion, terrainAt, haversine, barrenness } from './data.js';
-import { environmental } from './engine.js';
+import { powerRegional, jaxaRegion, terrainAt, haversine } from './data.js';
+import { environmental, evaluate } from './engine.js';
+import { loadVolcanoes, caveEvidenceSync } from './evidence.js';
 import { SITES } from './sites.js';
 
+/** A candidate this far from every documented site is labelled as new. */
+export const NOVEL_KM = 150;
+
 const POWER_SRC = { T2M: 'T2M', T2M_RANGE: 'T2M_RANGE', PRECIP: 'PRECTOTCORR', RH2M: 'RH2M', UV: 'ALLSKY_SFC_UV_INDEX', SOLAR: 'ALLSKY_SFC_SW_DWN', PS: 'PS', CLOUD: 'CLOUD_AMT', WIND: 'WS2M' };
+const abortIf = signal => { if (signal?.aborted) throw new DOMException('aborted', 'AbortError'); };
 
 export function scanBox(lat, lon, size = 10) {
   const h = size / 2;
@@ -43,10 +48,10 @@ export async function scan(target, box, { mission = 'balanced', onProgress = () 
   }
   const list = [...cells.values()];
 
-  // 2. JAXA / ESA rasters, sampled at twice the POWER grid resolution
+  // 2. JAXA / ESA rasters (four-season annual means), sampled at twice the POWER grid resolution
+  abortIf(signal);
   const W = Math.round((box.e - box.w) / 0.25), H = Math.round((box.n - box.s) / 0.25);
-  const month = new Date().getUTCMonth();
-  const jx = await jaxaRegion(box, W, H, month).catch(() => ({}));
+  const jx = await jaxaRegion(box, W, H).catch(() => null);
   const pick = (arr, lat, lon) => {
     if (!arr) return null;
     const i = Math.min(W - 1, Math.max(0, Math.floor((lon - box.w) / (box.e - box.w) * W)));
@@ -55,31 +60,36 @@ export async function scan(target, box, { mission = 'balanced', onProgress = () 
     return v == null || !isFinite(v) ? null : v;
   };
   for (const c of list) {
-    const d = pick(jx.LSTD, c.lat, c.lon), n = pick(jx.LSTN, c.lat, c.lon), lc = pick(jx.LC, c.lat, c.lon);
-    c.vals.NDVI = pick(jx.NDVI, c.lat, c.lon);
-    c.vals.SOILM = pick(jx.SOILM, c.lat, c.lon);
-    c.vals.LST_NIGHT = n == null ? null : n - 273.15;
-    c.vals.LST_SWING = d == null || n == null ? null : d - n;
-    c.lc = lc == null ? null : Math.round(lc);
-    c.vals.BARREN = barrenness(c.lc);
+    for (const k of ['NDVI', 'SOILM', 'LST_NIGHT', 'LST_SWING', 'BARREN']) c.vals[k] = pick(jx?.[k], c.lat, c.lon);
+    c.lc = pick(jx?.LC, c.lat, c.lon);
   }
   tick('JAXA & ESA satellite layers');
 
-  // 3. Terrain, always fetched because it also masks out ocean cells.
-  // A coarse zoom keeps the tile count small.
+  // 3. Terrain, always fetched because it also masks out ocean cells. Zoom 7
+  // (≈1.2 km pixels) with a 3-pixel window gives about the same ≈3–4 km relief
+  // window as the site report; slopes are smoother than at full resolution.
+  abortIf(signal);
   await pool(list.map(c => async () => {
-    try { Object.assign(c.vals, await terrainAt(c.lat, c.lon, 6, 2)); } catch { /* terrain optional */ }
+    abortIf(signal);
+    try { Object.assign(c.vals, await terrainAt(c.lat, c.lon, 7, 1)); } catch { /* terrain optional */ }
   }), 8);
   tick('SRTM terrain');
+  abortIf(signal);
 
-  // 4. Score land cells
+  // 4. Score land cells. Cave targets also use cave evidence (volcanoes and documented tubes).
+  const caveTarget = (target.geoWeight ?? 0) >= 0.5;
+  const vols = caveTarget ? await loadVolcanoes().catch(() => []) : null;
   const scored = [];
   for (const c of list) {
-    const water = c.lc === 210 || (c.vals.ELEV != null && c.vals.ELEV < -5) || (c.lc == null && c.vals.NDVI == null && (c.vals.ELEV ?? 0) <= 0);
+    // Land cover decides when it is known (so below-sea-level land such as Death Valley
+    // or the Dead Sea is kept); otherwise treat low cells with no land signal as water.
+    const water = c.lc != null ? c.lc === 210 : c.vals.NDVI == null && (c.vals.ELEV ?? 0) <= 0;
     if (water) continue;
     const e = environmental(target, c.vals, mission);
     if (e.score == null) continue;
-    scored.push({ ...c, score: Math.round(e.score * 100), coverage: e.coverage });
+    let score = Math.round(e.score * 100), cave = null;
+    if (caveTarget) { cave = caveEvidenceSync(c.lat, c.lon, vols); score = evaluate(target, c.vals, [], mission, cave.tags).score; }
+    scored.push({ ...c, score, coverage: e.coverage, cave: cave?.level });
   }
 
   // 5. Candidate peaks at least ~1° apart
@@ -90,7 +100,7 @@ export async function scan(target, box, { mission = 'balanced', onProgress = () 
     if (picks.some(p => Math.abs(p.lat - c.lat) < 1 && Math.abs(p.lon - c.lon) < 1.2)) continue;
     let near = null, dist = Infinity;
     for (const s of SITES) { const d = haversine(c.lat, c.lon, s.lat, s.lon); if (d < dist) { dist = d; near = s; } }
-    picks.push({ ...c, nearest: near, nearestKm: Math.round(dist), novel: dist > 150 });
+    picks.push({ ...c, nearest: near, nearestKm: Math.round(dist), novel: dist > NOVEL_KM });
   }
-  return { box, cells: scored, candidates: picks, month, jaxa: Object.values(jx).some(Boolean) };
+  return { box, cells: scored, candidates: picks, jaxa: !!jx };
 }

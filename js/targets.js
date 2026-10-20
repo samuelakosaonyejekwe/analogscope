@@ -6,25 +6,31 @@
 // Values between are eased with smoothstep. Planetary reference values are
 // shown for context only; no place on Earth reaches them.
 
+// Planetary reference values used in comparisons (one source for every quoted number).
+export const PLANET = {
+  mars: { pressureKPa: 0.6, meanTempC: -60, gravityG: 0.38 },   // global means (NASA Mars Fact Sheet)
+  moon: { surfaceSwingC: 300, gravityG: 0.165 },                 // −173 °C to +127 °C at the equator (LRO Diviner)
+};
+
 export const VARIABLES = {
   T2M:        { short: 'Cold', label: 'Mean air temperature', unit: '°C', src: 'NASA POWER (MERRA-2)', dp: 1 },
   T2M_RANGE:  { short: 'Air swing', label: 'Day–night temperature swing', unit: '°C', src: 'NASA POWER (MERRA-2)', dp: 1 },
-  PRECIP:     { short: 'Dry', label: 'Precipitation', unit: 'mm/yr', src: 'NASA POWER (MERRA-2 / IMERG)', dp: 0 },
+  PRECIP:     { short: 'Dry', label: 'Precipitation', unit: 'mm/yr', src: 'NASA POWER (MERRA-2, bias-corrected)', dp: 0 },
   RH2M:       { short: 'Humidity', label: 'Relative humidity', unit: '%', src: 'NASA POWER (MERRA-2)', dp: 0 },
   UV:         { short: 'UV', label: 'UV index (24-h mean)', unit: '', src: 'NASA POWER (CERES)', dp: 1 },
   SOLAR:      { short: 'Sun', label: 'Solar energy at surface', unit: 'kWh/m²/day', src: 'NASA POWER (CERES)', dp: 2 },
   PS:         { short: 'Thin air', label: 'Surface air pressure', unit: 'kPa', src: 'NASA POWER (MERRA-2)', dp: 1 },
   CLOUD:      { short: 'Clear sky', label: 'Cloud cover', unit: '%', src: 'NASA POWER (CERES)', dp: 0 },
   WIND:       { short: 'Wind', label: 'Wind speed at 2 m', unit: 'm/s', src: 'NASA POWER (MERRA-2)', dp: 1 },
-  ELEV:       { short: 'Elevation', label: 'Elevation', unit: 'm', src: 'SRTM/NASA DEM terrain tiles', dp: 0 },
-  RELIEF:     { short: 'Relief', label: 'Local relief (≈3 km window)', unit: 'm', src: 'SRTM/NASA DEM terrain tiles', dp: 0 },
-  SLOPE:      { short: 'Flatness', label: 'Surface slope', unit: '°', src: 'SRTM/NASA DEM terrain tiles', dp: 1 },
+  ELEV:       { short: 'Elevation', label: 'Elevation', unit: 'm', src: 'Terrain tiles (SRTM 60°N–56°S; coarser DEMs elsewhere)', dp: 0 },
+  RELIEF:     { short: 'Relief', label: 'Local relief (≈3 km window)', unit: 'm', src: 'Terrain tiles (SRTM 60°N–56°S; coarser DEMs elsewhere)', dp: 0 },
+  SLOPE:      { short: 'Flatness', label: 'Surface slope', unit: '°', src: 'Terrain tiles (SRTM 60°N–56°S; coarser DEMs elsewhere)', dp: 1 },
   ABSLAT:     { short: 'Polar', label: 'Latitude (sun-angle proxy)', unit: '°', src: 'Geometry', dp: 1 },
-  NDVI:       { short: 'No plants', label: 'Vegetation index (NDVI)', unit: '', src: 'JAXA JASMES (Terra/Aqua MODIS)', dp: 2 },
-  LST_SWING:  { short: 'Ground swing', label: 'Ground day–night swing', unit: '°C', src: 'JAXA GCOM-C SGLI', dp: 1 },
-  LST_NIGHT:  { short: 'Cold nights', label: 'Ground temperature at night', unit: '°C', src: 'JAXA GCOM-C SGLI', dp: 1 },
-  SOILM:      { short: 'Dry soil', label: 'Soil moisture', unit: '%', src: 'JAXA GCOM-W AMSR2', dp: 1 },
-  BARREN:     { short: 'Bare', label: 'Bare-ground fraction', unit: '', src: 'ESA CCI / Copernicus C3S land cover', dp: 2 },
+  NDVI:       { short: 'No plants', label: 'Vegetation index (NDVI)', unit: '', src: 'JAXA JASMES (Terra/Aqua MODIS, 2012–2021), 4-season mean', dp: 2 },
+  LST_SWING:  { short: 'Ground swing', label: 'Ground day–night swing', unit: '°C', src: 'JAXA JASMES land surface temp. (GCOM-C SGLI), 4-season mean', dp: 1 },
+  LST_NIGHT:  { short: 'Cold nights', label: 'Ground temperature at night', unit: '°C', src: 'JAXA JASMES land surface temp. (GCOM-C SGLI), 4-season mean', dp: 1 },
+  SOILM:      { short: 'Dry soil', label: 'Soil moisture', unit: '%', src: 'JAXA GCOM-W AMSR2 (2012–2021), 4-season mean', dp: 1 },
+  BARREN:     { short: 'Bare', label: 'Bare-ground score (land cover)', unit: '', src: 'ESA CCI / Copernicus C3S land cover 2019', dp: 2 },
 };
 
 export const GEOLOGY = {
@@ -32,6 +38,7 @@ export const GEOLOGY = {
   tephra:      'Fine volcanic ash / regolith-like soil',
   impact:      'Impact crater structure',
   lavatube:    'Lava tubes, pits or caves',
+  lavaprone:   'Lava-tube-forming volcanic setting (inferred)',
   permafrost:  'Permafrost / ground ice',
   polar:       'Polar light regime',
   evaporite:   'Salts, sulfates & evaporites',
@@ -48,9 +55,9 @@ export const GEOLOGY = {
 export const TARGETS = [
   {
     id: 'moon-south-pole', body: 'moon', name: 'Lunar South Pole',
-    short: 'Artemis base region', lat: -89.5, lon: 0,
+    short: 'Artemis base region', lat: -89.67, lon: 129.78,
     blurb: 'Rim of Shackleton crater and nearby ridges, the region Artemis is targeting for crewed landings. The Sun stays near the horizon, crater floors never see sunlight and hold water ice, and the ground is rough and covered in impact debris.',
-    ref: { 'Surface temperature': '−230 °C (shadowed) to ≈ −50 °C (lit rims)', Atmosphere: 'None (exosphere)', 'Sun elevation': '< 2° above horizon', Resource: 'Water ice in permanently shadowed regions' },
+    ref: { 'Surface temperature': 'As low as −248 °C (≈ 25 K) in permanently shadowed craters; ≈ −50 °C on sunlit rims', Atmosphere: 'None (exosphere)', 'Sun elevation': '< 2° above horizon', Resource: 'Water ice in permanently shadowed regions' },
     criteria: [
       { v: 'T2M', best: -35, worst: 15, w: 3 },
       { v: 'ABSLAT', best: 78, worst: 50, w: 3 },
@@ -84,8 +91,8 @@ export const TARGETS = [
   {
     id: 'moon-lavatube', body: 'moon', name: 'Lunar Lava Tubes',
     short: 'Marius Hills pit', lat: 14.09, lon: -56.77,
-    blurb: 'Skylights into lava tubes (Marius Hills, Mare Tranquillitatis pit). Inside, temperatures stay near 17 °C and the rock overhead blocks radiation and micrometeorites, which makes them candidate habitat sites.',
-    ref: { 'Pit diameter': '≈ 65 m (Marius Hills)', 'Interior temperature': '≈ +17 °C, stable', Shielding: 'Natural radiation and impact protection' },
+    blurb: 'Skylights into lava tubes (Marius Hills, Mare Tranquillitatis pit). LRO Diviner data show the shaded floor of the Mare Tranquillitatis pit stays near 17 °C, and the rock overhead blocks radiation and micrometeorites, which makes such caves candidate habitat sites.',
+    ref: { 'Pit diameter': '≈ 65 m (Marius Hills)', 'Shaded interior temperature': '≈ +17 °C, stable (Mare Tranquillitatis pit, LRO Diviner)', Shielding: 'Natural radiation and impact protection' },
     criteria: [
       { v: 'PRECIP', best: 100, worst: 1200, w: 2 },
       { v: 'T2M_RANGE', best: 16, worst: 5, w: 1 },
@@ -102,7 +109,7 @@ export const TARGETS = [
     id: 'mars-jezero', body: 'mars', name: 'Jezero Crater',
     short: 'Ancient lake delta', lat: 18.38, lon: 77.58,
     blurb: 'An old river delta flowing into a crater lake, now being explored by the Perseverance rover. It has clays and carbonates and is one of the best places to look for signs of ancient life.',
-    ref: { 'Mean temperature': '≈ −60 °C', Pressure: '≈ 0.6 kPa', Humidity: '≈ 0.03 % water vapour', Geology: 'Delta sediments, clays, carbonates' },
+    ref: { 'Mean temperature': '≈ −60 °C', Pressure: '≈ 0.7 kPa (Perseverance MEDA)', Humidity: '≈ 0.03 % water vapour', Geology: 'Delta sediments, clays, carbonates' },
     criteria: [
       { v: 'PRECIP', best: 15, worst: 500, w: 3 },
       { v: 'RH2M', best: 15, worst: 70, w: 2 },
@@ -155,7 +162,7 @@ export const TARGETS = [
     id: 'mars-tharsis', body: 'mars', name: 'Tharsis Volcanic Highlands',
     short: 'Thin air, high UV', lat: 1.5, lon: -112,
     blurb: 'High volcanic plateau (Arsia, Pavonis and Ascraeus Mons). Very thin air, strong UV, and lava plains made of basalt.',
-    ref: { Pressure: '≈ 0.1–0.3 kPa on the summits', UV: 'Unfiltered UV-C at the surface', Geology: 'Shield volcanoes, basalt' },
+    ref: { Pressure: '≈ 0.07 kPa (Olympus Mons) to ≈ 0.13 kPa (Arsia Mons) on the summits', UV: 'Unfiltered UV-C at the surface', Geology: 'Shield volcanoes, basalt' },
     criteria: [
       { v: 'PS', best: 55, worst: 98, w: 3 },
       { v: 'UV', best: 3, worst: 1.2, w: 2 },
@@ -196,4 +203,23 @@ export const MISSIONS = {
                mult: { PRECIP: 1.6, RH2M: 1.6, UV: 1.6, SOILM: 1.8, NDVI: 1.5 }, geoBoost: ['biosig', 'sterile', 'hydrothermal', 'clay', 'acidic'] },
   habitat:   { label: 'Habitat & crew', note: 'Puts more weight on thermal extremes, clear skies and solar power, for testing habitats and crew operations.',
                mult: { T2M_RANGE: 1.6, SOLAR: 1.6, CLOUD: 1.4, LST_SWING: 1.6 }, geoBoost: ['lavatube'] },
+};
+
+// Conditions no place on Earth can reproduce, and how missions close each gap.
+// `site` names the Earth variable used to show how far this site is from the real value.
+export const GAPS = {
+  moon: [
+    { what: 'Vacuum', planet: 'Essentially none (≈ 3 × 10⁻¹⁵ of Earth’s pressure)', site: 'PS', lab: 'Thermal-vacuum chambers, e.g. NASA Johnson Chamber A and the Neil Armstrong Test Facility' },
+    { what: 'Gravity', planet: '≈ 1/6 g (0.165 g)', lab: 'Reduced-gravity parabolic flights and the ARGOS offload system at NASA Johnson' },
+    { what: 'Radiation', planet: 'No atmosphere or magnetic field; solar particle events and cosmic rays reach the surface', lab: 'NASA Space Radiation Laboratory (Brookhaven) for materials and biology' },
+    { what: 'Regolith', planet: 'Sharp, electrostatically charged dust that has never been weathered by water', lab: 'Lunar regolith simulants (e.g. LHS-1, JSC-1A) in “dirty” vacuum chambers' },
+    { what: 'Day–night cycle', planet: '≈ 14.8 Earth days of sunlight, then ≈ 14.8 days of darkness; the surface swings by ≈ 300 °C', site: 'LST_SWING', lab: 'Thermal-cycling chambers; polar sites help with low sun angles' },
+  ],
+  mars: [
+    { what: 'Atmospheric pressure', planet: '≈ 0.6 kPa, 95 % CO₂', site: 'PS', lab: 'Mars simulation chambers, e.g. NASA Ames MARSWIT and the Aarhus Mars Simulation Wind Tunnel' },
+    { what: 'Gravity', planet: '0.38 g', lab: 'Mars-profile parabolic flights and gravity-offload rigs' },
+    { what: 'Cold', planet: 'Mean ≈ −60 °C, nights below −80 °C', site: 'T2M', lab: 'Climate chambers; Antarctic sites come closest outdoors' },
+    { what: 'Radiation', planet: '≈ 0.64 mSv per day at the surface (Curiosity RAD, Hassler et al. 2014)', lab: 'NASA Space Radiation Laboratory (Brookhaven)' },
+    { what: 'Soil chemistry', planet: 'Perchlorate ≈ 0.4–0.6 wt % (Phoenix), strongly oxidising; organics are rare and degraded near the surface', lab: 'Mars regolith simulants (e.g. MGS-1) spiked with perchlorate' },
+  ],
 };

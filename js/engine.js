@@ -39,14 +39,20 @@ export function geologic(target, tags, mission = 'balanced') {
     const w = (base[i] ?? 0.4) * (boost.has(g) ? 1.5 : 1);
     tot += w;
     if (tags.includes(g)) { hit += w; matched.push(g); }
+    // Volcanic setting that forms lava tubes: half credit until caves are documented.
+    else if (g === 'lavatube' && tags.includes('lavaprone')) { hit += w / 2; matched.push('lavaprone'); }
   });
   return { score: tot ? hit / tot : 0, matched, missing: target.geo.filter(g => !tags.includes(g)) };
 }
 
-export function evaluate(target, vals, tags, mission = 'balanced') {
+/** evidence: geology tags inferred from data (cave evidence), used only for
+ *  geology-dependent targets when no documented or user-entered geology exists. */
+export function evaluate(target, vals, tags, mission = 'balanced', evidence = null) {
   const env = environmental(target, vals, mission);
-  const geo = geologic(target, tags, mission);
   const gw = target.geoWeight ?? 0.35;
+  let useTags = tags && tags.length ? tags : null;
+  if (!useTags && evidence?.length && gw >= 0.5) useTags = evidence;
+  const geo = geologic(target, useTags, mission);
   let score = env.score;
   // Cave targets cannot be judged from climate alone: without known geology,
   // cap the score at the environmental share so it never reads as a strong analog.
@@ -57,22 +63,22 @@ export function evaluate(target, vals, tags, mission = 'balanced') {
   return { target, score: score == null ? null : Math.round(score * 100), env, geo, geoRequired, confidence: Math.round(env.coverage * 100) };
 }
 
-export function rankTargets(vals, tags, mission) {
-  return TARGETS.map(t => evaluate(t, vals, tags, mission)).sort((a, b) => (b.score ?? -1) - (a.score ?? -1));
+export function rankTargets(vals, tags, mission, evidence) {
+  return TARGETS.map(t => evaluate(t, vals, tags, mission, evidence)).sort((a, b) => (b.score ?? -1) - (a.score ?? -1));
 }
 
 /** Monthly analog scores, used to suggest the best months for a field campaign. */
-export function monthly(target, profile, tags, mission) {
+export function monthly(target, profile, tags, mission, evidence) {
   if (!profile.months) return null;
   return MONTHS.map((m, i) => {
     const vals = { ...profile.ann };
     for (const [k, arr] of Object.entries(profile.months)) if (arr[i] != null) vals[k] = arr[i];
-    return { m, score: evaluate(target, vals, tags, mission).score };
+    return { m, score: evaluate(target, vals, tags, mission, evidence).score };
   });
 }
 
 /** Re-score using the last 30 days of observations instead of long-term normals. */
-export function liveScore(target, profile, recent, tags, mission) {
+export function liveScore(target, profile, recent, tags, mission, evidence) {
   if (!recent?.series) return null;
   const s = recent.series, n = s.T2M.length, from = Math.max(0, n - 30);
   const mean = a => { const v = a.slice(from).filter(x => x != null); return v.length ? v.reduce((p, q) => p + q, 0) / v.length : null; };
@@ -84,7 +90,7 @@ export function liveScore(target, profile, recent, tags, mission) {
   const pr = mean(s.PRECTOTCORR); if (pr != null) vals.PRECIP = pr * 365;
   set('RH2M', mean(s.RH2M)); set('UV', mean(s.ALLSKY_SFC_UV_INDEX)); set('SOLAR', mean(s.ALLSKY_SFC_SW_DWN));
   set('WIND', mean(s.WS2M)); set('CLOUD', mean(s.CLOUD_AMT)); set('PS', mean(s.PS));
-  return { ...evaluate(target, vals, tags, mission), vals };
+  return { ...evaluate(target, vals, tags, mission, evidence), vals };
 }
 
 /** Short explanation of what drives a score. */
@@ -97,18 +103,26 @@ export function explain(ev) {
   if (strong.length) parts.push(`Strong match on ${strong.map(lbl).join(', ')}.`);
   if (weak.length) parts.push(`Weakest on ${weak.map(lbl).join(' and ')}.`);
   if (ev.geo) {
-    if (ev.geo.matched.length) parts.push(`Shares geology with the target: ${ev.geo.matched.map(g => GEOLOGY[g].toLowerCase()).join(', ')}.`);
-    else parts.push('None of its documented geology matches this target.');
+    if (ev.geo.matched.length) {
+      parts.push(`Shares geology with the target: ${ev.geo.matched.map(g => GEOLOGY[g].toLowerCase()).join(', ')}.`);
+      if (ev.geo.matched.includes('lavaprone')) parts.push('Caves are inferred from the volcanic setting and get half credit until confirmed in the field.');
+    } else parts.push('None of its documented geology matches this target.');
   } else if (ev.geoRequired) parts.push('This target depends on lava tubes or caves, which satellites cannot confirm, so the score is capped until caves are documented here. If you know there are caves, add lava tubes under Geology.');
   else parts.push('No geology documented for this point, so the score uses environmental data only.');
   return parts.join(' ');
 }
 
+// Score bands: the single source for grade labels and the colours used on maps,
+// tables and gauges (the CSS --ga…--ge variables hold the same colours).
+export const BANDS = [
+  { min: 80, label: 'Exceptional analog', cls: 'g-a', color: '#34d399' },
+  { min: 65, label: 'Strong analog', cls: 'g-b', color: '#7dd3fc' },
+  { min: 50, label: 'Moderate analog', cls: 'g-c', color: '#fbbf24' },
+  { min: 35, label: 'Weak analog', cls: 'g-d', color: '#fb923c' },
+  { min: -Infinity, label: 'Poor analog', cls: 'g-e', color: '#f87171' },
+];
+
 export function grade(s) {
-  if (s == null) return { label: 'No data', cls: 'g-none' };
-  if (s >= 80) return { label: 'Exceptional analog', cls: 'g-a' };
-  if (s >= 65) return { label: 'Strong analog', cls: 'g-b' };
-  if (s >= 50) return { label: 'Moderate analog', cls: 'g-c' };
-  if (s >= 35) return { label: 'Weak analog', cls: 'g-d' };
-  return { label: 'Poor analog', cls: 'g-e' };
+  if (s == null) return { label: 'No data', cls: 'g-none', color: '#94a3b8' };
+  return BANDS.find(b => s >= b.min);
 }

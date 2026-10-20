@@ -2,6 +2,9 @@
 
 export const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
+/** Only http(s) links from external feeds are ever placed in href/src. */
+export const safeUrl = u => { try { const x = new URL(u); return x.protocol === 'https:' || x.protocol === 'http:' ? x.href : ''; } catch { return ''; } };
+
 /** Radar of per-criterion scores (0..1). */
 export function radar(rows, { size = 240, color = 'var(--accent)' } = {}) {
   const pts = rows.filter(r => r.s != null);
@@ -62,6 +65,6 @@ export function lineChart(pts, { w = 320, h = 90, log = false, bands = [] } = {}
   const t0 = v[0][0], t1 = v[v.length - 1][0];
   const X = t => (t - t0) / (t1 - t0 || 1) * (w - 6) + 3, Y = y => h - 4 - (f(y) - lo) / span * (h - 10);
   const d = v.map((p, k) => `${k ? 'L' : 'M'}${X(p[0]).toFixed(1)},${Y(p[1]).toFixed(1)}`).join('');
-  const b = bands.map(b => `<line x1="0" x2="${w}" y1="${Y(b.v)}" y2="${Y(b.v)}" class="sp-ref"/><text x="${w - 2}" y="${Math.max(9, Y(b.v) - 2)}" text-anchor="end" class="ml">${esc(b.label)}</text>`).join('');
+  const b = bands.map(b => `<line x1="0" x2="${w}" y1="${Y(b.v)}" y2="${Y(b.v)}" class="sp-ref"/><text x="${w - 2}" y="${Y(b.v) < 12 ? Y(b.v) + 9 : Y(b.v) - 3}" text-anchor="end" class="ml">${esc(b.label)}</text>`).join('');
   return `<svg viewBox="0 0 ${w} ${h}" class="line" role="img" aria-label="Time series">${b}<path d="${d}" class="sp-line"/></svg>`;
 }

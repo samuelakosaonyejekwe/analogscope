@@ -1,23 +1,24 @@
 // AnalogScope service worker: offline app shell, cached map tiles and the latest live data.
-const VERSION = 'v1.0.0';
+const VERSION = 'v1.2.0';
 const SHELL = `as-shell-${VERSION}`;
 const TILES = 'as-tiles-v1';
 const DATA = 'as-data-v1';
 const LIB = 'as-lib-v1';
+const PACK = 'as-pack-v1';   // offline map pack saved from the Live page; never trimmed
 const MAX_TILES = 3000;
 
 const ASSETS = [
   './', 'index.html', 'styles.css', 'manifest.webmanifest',
   'js/app.js', 'js/state.js', 'js/data.js', 'js/engine.js', 'js/targets.js', 'js/sites.js', 'js/scan.js',
-  'js/charts.js', 'js/mapview.js', 'js/report.js', 'js/pages.js', 'js/install.js',
+  'js/charts.js', 'js/mapview.js', 'js/report.js', 'js/pages.js', 'js/install.js', 'js/evidence.js', 'js/lavatubes.js', 'js/mars.js',
   'vendor/leaflet/leaflet.js', 'vendor/leaflet/leaflet.css',
   'vendor/leaflet/images/layers.png', 'vendor/leaflet/images/layers-2x.png', 'vendor/leaflet/images/marker-icon.png',
   'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/maskable-512.png', 'icons/apple-touch-icon.png',
-  'data/snapshot.json',
+  'data/snapshot.json', 'data/volcanoes.json', 'icons/favicon.ico',
 ];
 const JAXA_LIB = 'https://data.earth.jaxa.jp/api/javascript/v1.2.3/jaxa.earth.esm.js';
 const TILE_HOSTS = ['gibs.earthdata.nasa.gov', 'trek.nasa.gov', 'tiles.maps.eox.at', 's3.amazonaws.com'];
-const DATA_HOSTS = ['power.larc.nasa.gov', 'eonet.gsfc.nasa.gov', 'services.swpc.noaa.gov', 'earthquake.usgs.gov', 'mars.nasa.gov', 'images-api.nasa.gov', 'api.nasa.gov'];
+const DATA_HOSTS = ['power.larc.nasa.gov', 'eonet.gsfc.nasa.gov', 'services.swpc.noaa.gov', 'earthquake.usgs.gov', 'mars.nasa.gov', 'images-api.nasa.gov', 'api.nasa.gov', 'www.nasa.gov'];
 const FEEDS = [
   'https://eonet.gsfc.nasa.gov/api/v3/events?status=open&days=60&limit=400',
   'https://services.swpc.noaa.gov/products/noaa-planetary-k-index.json',
@@ -29,7 +30,8 @@ const FEEDS = [
 self.addEventListener('install', e => {
   e.waitUntil((async () => {
     const c = await caches.open(SHELL);
-    await c.addAll(ASSETS);
+    // Bypass the HTTP cache so a new version never precaches stale copies.
+    await c.addAll(ASSETS.map(u => new Request(u, { cache: 'reload' })));
     try { const l = await caches.open(LIB); if (!(await l.match(JAXA_LIB))) await l.add(new Request(JAXA_LIB, { mode: 'cors' })); } catch { /* fetched later */ }
     await self.skipWaiting();
   })());
@@ -37,7 +39,8 @@ self.addEventListener('install', e => {
 
 self.addEventListener('activate', e => {
   e.waitUntil((async () => {
-    for (const k of await caches.keys()) if (k.startsWith('as-shell-') && k !== SHELL) await caches.delete(k);
+    const keep = new Set([SHELL, TILES, DATA, LIB, PACK]);
+    for (const k of await caches.keys()) if (k.startsWith('as-') && !keep.has(k)) await caches.delete(k);
     if (self.registration.navigationPreload) await self.registration.navigationPreload.enable().catch(() => {});
     await self.clients.claim();
   })());
@@ -64,11 +67,12 @@ self.addEventListener('fetch', e => {
   if (url.origin === location.origin) {
     if (req.mode === 'navigate') {
       e.respondWith((async () => {
-        const cached = await caches.match('index.html');
+        const shell = await caches.open(SHELL);
+        const cached = await shell.match('index.html');
         const net = (async () => {
           const pre = await e.preloadResponse;
           const r = pre || await fetch(req);
-          if (r.ok) (await caches.open(SHELL)).put('index.html', r.clone());
+          if (r.ok) await shell.put('index.html', r.clone());
           return r;
         })();
         e.waitUntil(net.catch(() => {}));
@@ -77,8 +81,9 @@ self.addEventListener('fetch', e => {
       return;
     }
     e.respondWith((async () => {
-      const cached = await caches.match(req, { ignoreSearch: true });
-      const net = fetch(req).then(async r => { if (r.ok) (await caches.open(SHELL)).put(req, r.clone()); return r; });
+      const shell = await caches.open(SHELL);
+      const cached = await shell.match(req, { ignoreSearch: true });
+      const net = fetch(req).then(async r => { if (r.ok) await shell.put(req, r.clone()); return r; });
       e.waitUntil(net.catch(() => {}));
       return cached || net;
     })());
@@ -87,18 +92,23 @@ self.addEventListener('fetch', e => {
 
   // JAXA client library: cache first.
   if (url.href === JAXA_LIB) {
-    e.respondWith((async () => (await caches.match(req)) || fetch(req).then(async r => { if (r.ok) (await caches.open(LIB)).put(req, r.clone()); return r; }))());
+    e.respondWith((async () => {
+      const lib = await caches.open(LIB);
+      return (await lib.match(req)) || fetch(req).then(async r => { if (r.ok) await lib.put(req, r.clone()); return r; });
+    })());
     return;
   }
 
   // Map and terrain tiles: cache first, bounded size.
   if (TILE_HOSTS.includes(url.hostname) && !url.pathname.endsWith('.json')) {
     e.respondWith((async () => {
-      const c = await caches.open(TILES);
-      const hit = await c.match(req);
+      const hit = (await (await caches.open(PACK)).match(req)) || (await (await caches.open(TILES)).match(req));
       if (hit) return hit;
       const r = await fetch(req);
-      if (r.ok && r.type !== 'opaque') { c.put(req, r.clone()); if (Math.random() < 0.02) e.waitUntil(trim(TILES, MAX_TILES)); }
+      if (r.ok && r.type !== 'opaque') {
+        const copy = r.clone();
+        e.waitUntil(caches.open(TILES).then(c => c.put(req, copy)).then(() => (Math.random() < 0.02 ? trim(TILES, MAX_TILES) : null)));
+      }
       return r;
     })());
     return;
@@ -110,7 +120,7 @@ self.addEventListener('fetch', e => {
       const c = await caches.open(DATA);
       try {
         const r = await fetch(req);
-        if (r.ok) c.put(req, r.clone());
+        if (r.ok) { const copy = r.clone(); e.waitUntil(c.put(req, copy)); }
         return r;
       } catch (err) {
         const hit = await c.match(req);
@@ -121,11 +131,38 @@ self.addEventListener('fetch', e => {
   }
 });
 
-// Refresh live feeds in the background on browsers that support it.
+// Refresh live feeds in the background where Periodic Background Sync is available
+// (installed Chromium apps); other browsers refresh whenever the app is opened.
 async function refreshFeeds() {
   const c = await caches.open(DATA);
   await Promise.allSettled(FEEDS.map(u => fetch(u, { mode: 'cors' }).then(r => r.ok && c.put(u, r))));
 }
 self.addEventListener('periodicsync', e => { if (e.tag === 'refresh-live') e.waitUntil(refreshFeeds()); });
-self.addEventListener('sync', e => { if (e.tag === 'refresh-live') e.waitUntil(refreshFeeds()); });
-self.addEventListener('message', e => { if (e.data === 'refresh-live') e.waitUntil?.(refreshFeeds()); });
+
+// Offline map pack: the page sends the tile list; the worker downloads it straight into
+// the pack cache (its own fetches skip the tile handler, so nothing is stored twice)
+// and reports progress back to the page.
+self.addEventListener('message', e => {
+  if (e.data?.type !== 'pack' || !Array.isArray(e.data.urls)) return;
+  const urls = e.data.urls.filter(u => TILE_HOSTS.includes(new URL(u).hostname));
+  const port = e.ports[0];
+  e.waitUntil((async () => {
+    const pack = await caches.open(PACK);
+    let done = 0, ok = 0, bytes = 0, i = 0;
+    await Promise.all(Array.from({ length: 8 }, async () => {
+      while (i < urls.length) {
+        const u = urls[i++];
+        try {
+          if (await pack.match(u)) ok++;
+          else {
+            const r = await fetch(u, { mode: 'cors' });
+            if (r.ok) { const b = await r.clone().blob(); bytes += b.size; await pack.put(u, r); ok++; }
+          }
+        } catch { /* skip tile */ }
+        done++;
+        if (done % 10 === 0 || done === urls.length) port?.postMessage({ done, total: urls.length, ok, bytes });
+      }
+    }));
+    port?.postMessage({ done: urls.length, total: urls.length, ok, bytes, finished: true });
+  })());
+});

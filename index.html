@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>AnalogScope – Earth analogs for Moon &amp; Mars</title>
 <meta name="description" content="Find, score and compare places on Earth that resemble future Moon and Mars base sites, using live open data from NASA, JAXA, ESA/Copernicus and NOAA. Works offline and can be installed.">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://data.earth.jaxa.jp; connect-src 'self' https://power.larc.nasa.gov https://eonet.gsfc.nasa.gov https://api.nasa.gov https://mars.nasa.gov https://images-api.nasa.gov https://services.swpc.noaa.gov https://earthquake.usgs.gov https://s3.amazonaws.com https://s3.ap-northeast-1.wasabisys.com https://data.earth.jaxa.jp https://gibs.earthdata.nasa.gov https://trek.nasa.gov https://tiles.maps.eox.at; img-src 'self' data: blob: https:; style-src 'self' 'unsafe-inline'; font-src 'self'; worker-src 'self'; manifest-src 'self'; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://data.earth.jaxa.jp; connect-src 'self' https://www.nasa.gov https://power.larc.nasa.gov https://eonet.gsfc.nasa.gov https://api.nasa.gov https://mars.nasa.gov https://images-api.nasa.gov https://services.swpc.noaa.gov https://earthquake.usgs.gov https://s3.amazonaws.com https://s3.ap-northeast-1.wasabisys.com https://data.earth.jaxa.jp https://gibs.earthdata.nasa.gov https://trek.nasa.gov https://tiles.maps.eox.at; img-src 'self' data: blob: https:; style-src 'self' 'unsafe-inline'; font-src 'self'; worker-src 'self'; manifest-src 'self'; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'none'">
 <meta name="referrer" content="strict-origin-when-cross-origin">
 <meta name="theme-color" content="#070b16" media="(prefers-color-scheme: dark)">
 <meta name="theme-color" content="#f4f6fb" media="(prefers-color-scheme: light)">
@@ -16,7 +16,12 @@
 <meta name="apple-mobile-web-app-title" content="AnalogScope">
 <meta property="og:title" content="AnalogScope – Earth analogs for Moon & Mars">
 <meta property="og:description" content="Score any place on Earth as a stand-in for Moon and Mars base sites, using live NASA, JAXA, ESA and NOAA data.">
-<meta property="og:image" content="icons/og.png">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://samuelakosaonyejekwe.github.io/analogscope/">
+<meta property="og:image" content="https://samuelakosaonyejekwe.github.io/analogscope/icons/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
 <link rel="icon" href="icons/icon-192.png" sizes="192x192">
@@ -26,13 +31,17 @@
 <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
 </head>
 <body>
-<a class="skip" href="#main">Skip to content</a>
+<a class="skip" href="#main" id="skipLink">Skip to content</a>
 
 <header class="top">
-  <a class="brand" href="#/map" aria-label="AnalogScope home">
+  <a class="brand" href="#/explore" aria-label="AnalogScope home">
     <img src="icons/icon.svg" width="32" height="32" alt="">
     <span><b>AnalogScope</b><small>Earth analogs for Moon &amp; Mars</small></span>
   </a>
+  <div class="hist" role="group" aria-label="Back and forward">
+    <button id="navBack" class="arrow-btn" type="button" aria-label="Back" title="Back"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
+    <button id="navFwd" class="arrow-btn" type="button" aria-label="Forward" title="Forward"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button>
+  </div>
   <div class="top-actions">
     <span id="netPill" class="pill" role="status" aria-live="polite">Starting…</span>
     <button id="installBtn" class="btn btn-install" type="button" aria-haspopup="dialog">
@@ -46,14 +55,14 @@
 </header>
 
 <nav class="tabs" aria-label="Main">
-  <a href="#/map" data-view="map"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zm0 0v14m6-12v14"/></svg><span>Explore</span></a>
-  <a href="#/rank" data-view="rank"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10m6 10V4m6 16v-7m4 7H2"/></svg><span>Rankings</span></a>
+  <a href="#/explore" data-view="map"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zm0 0v14m6-12v14"/></svg><span>Explore</span></a>
+  <a href="#/rankings" data-view="rank"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10m6 10V4m6 16v-7m4 7H2"/></svg><span>Rankings</span></a>
   <a href="#/twin" data-view="twin"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="7" cy="12" r="4"/><circle cx="17" cy="12" r="4"/></svg><span>Twin view</span></a>
   <a href="#/live" data-view="live"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg><span>Live</span></a>
   <a href="#/method" data-view="method"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v6m0-10v.5"/></svg><span>Method</span></a>
 </nav>
 
-<main id="main">
+<main id="main" tabindex="-1">
   <!-- Explore -->
   <section id="v-map" class="view" aria-label="Explore map">
     <div class="controls">
@@ -69,19 +78,19 @@
       </div>
     </div>
     <div class="stage">
-      <div id="map" class="map" aria-label="Interactive map: tap anywhere to score that location"></div>
+      <div id="map" class="map" role="region" aria-label="Interactive map: tap anywhere to score that location"></div>
       <div class="map-legend" id="legend"></div>
       <button id="locBtn" class="fab" type="button" title="Score my current location" aria-label="Score my current location">
         <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3m0 14v3M2 12h3m14 0h3"/></svg>
       </button>
       <aside id="panel" class="panel" aria-label="Details">
-        <button class="sheet-handle" id="sheetHandle" type="button" aria-label="Expand or collapse details"></button>
+        <button class="sheet-handle" id="sheetHandle" type="button" aria-label="Resize the details panel" aria-controls="panel" aria-expanded="true"></button>
         <div class="panel-tabs" role="tablist">
-          <button role="tab" id="ptSite" aria-selected="true" data-p="site">Site report</button>
-          <button role="tab" id="ptScan" aria-selected="false" data-p="scan">Discover new analogs</button>
+          <button role="tab" id="ptSite" aria-selected="true" aria-controls="pSite" data-p="site">Site report</button>
+          <button role="tab" id="ptScan" aria-selected="false" aria-controls="pScan" data-p="scan">Discover new analogs</button>
         </div>
-        <div id="pSite" class="pbody" role="tabpanel"></div>
-        <div id="pScan" class="pbody" role="tabpanel" hidden></div>
+        <div id="pSite" class="pbody" role="tabpanel" aria-labelledby="ptSite"></div>
+        <div id="pScan" class="pbody" role="tabpanel" aria-labelledby="ptScan" hidden></div>
       </aside>
     </div>
   </section>
@@ -99,6 +108,7 @@
     </div>
     <div id="matrix" class="matrix-wrap"></div>
     <div id="rankTable"></div>
+    <div class="pager-slot"></div>
   </section>
 
   <!-- Twin view -->
@@ -116,6 +126,7 @@
       <figure><div id="twinPlanet" class="map twin-map"></div><figcaption id="capPlanet"></figcaption></figure>
     </div>
     <div id="twinBody"></div>
+    <div class="pager-slot"></div>
   </section>
 
   <!-- Live -->
@@ -125,12 +136,14 @@
       <p class="lead">Current data from NASA, NOAA and USGS, fetched directly by your browser. If you go offline, the last copy you downloaded is shown with its timestamp.</p>
       <button id="refreshBtn" class="btn" type="button">Refresh all</button>
     </div>
-    <div class="grid" id="liveGrid"></div>
+    <div class="grid" id="liveGrid" aria-live="polite"></div>
+    <div class="pager-slot"></div>
   </section>
 
   <!-- Method -->
   <section id="v-method" class="view page prose" hidden aria-label="Method">
     <div id="methodBody"></div>
+    <div class="pager-slot"></div>
   </section>
 </main>
 

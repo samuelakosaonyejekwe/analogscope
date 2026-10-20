@@ -1,11 +1,13 @@
 // Explore map: base layers, analog site markers, live events and the discovery scan.
-import { state, set, target, siteProfile, toast, scoreColor, fmt, mark } from './state.js';
+import { state, target, siteProfile, toast, scoreColor, mark } from './state.js';
 import { SITES } from './sites.js';
 import { TARGETS, MISSIONS } from './targets.js';
 import { evaluate } from './engine.js';
 import { live } from './data.js';
 import { scan, scanBox } from './scan.js';
-import { esc } from './charts.js';
+import { esc, safeUrl } from './charts.js';
+import { loadVolcanoes } from './evidence.js';
+import { LAVA_TUBES } from './lavatubes.js';
 
 const yesterday = () => new Date(Date.now() - 864e5).toISOString().slice(0, 10);
 const GIBS = 'https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/';
@@ -18,7 +20,7 @@ export const LAYERS = {
   relief: { label: 'NASA ASTER GDEM relief', url: GIBS + 'ASTER_GDEM_Greyscale_Shaded_Relief/default/GoogleMapsCompatible_Level12/{z}/{y}/{x}.jpg', max: 12, attr: 'NASA/METI ASTER GDEM via GIBS' },
 };
 
-let map, base, under, siteLayer, eventLayer, heatLayer, candLayer, pointMarker;
+let map, base, under, siteLayer, volcLayer, tubeLayer, eventLayer, heatLayer, candLayer, pointMarker;
 let onSelect = () => {};
 const markers = new Map();
 
@@ -29,6 +31,8 @@ function tile(def) {
 
 export function setBase(id) {
   const def = LAYERS[id] || LAYERS.bluemarble;
+  legendNote = id === 'lst' ? 'Map colours: Terra MODIS daytime land-surface temperature (blue = cold, red = hot), two days ago.' : def.live ? 'Map: yesterday’s satellite pass; gaps are areas the satellite has not covered yet.' : '';
+  if (map) legend();
   if (base) map.removeLayer(base);
   if (under) { map.removeLayer(under); under = null; }
   if (def.under) { under = tile(LAYERS[def.under]).addTo(map); under.bringToBack(); }
@@ -45,16 +49,18 @@ export function initMap(el, select) {
   setBase(state.layer);
   siteLayer = L.layerGroup().addTo(map);
   eventLayer = L.layerGroup();
+  volcLayer = L.layerGroup();
+  tubeLayer = L.layerGroup();
   heatLayer = L.layerGroup().addTo(map);
   candLayer = L.layerGroup().addTo(map);
-  L.control.layers(null, { 'Analog sites': siteLayer, 'Live natural events (NASA EONET)': eventLayer, 'Discovery heatmap': heatLayer, 'My saved candidates': candLayer }, { position: 'topright', collapsed: true }).addTo(map);
+  L.control.layers(null, { 'Analog sites': siteLayer, 'Live natural events (NASA EONET)': eventLayer, 'Volcanoes (Smithsonian GVP)': volcLayer, 'Documented lava tubes': tubeLayer, 'Discovery heatmap': heatLayer, 'My saved candidates': candLayer }, { position: 'topright', collapsed: true }).addTo(map);
   L.control.scale({ imperial: false, position: 'topright' }).addTo(map);
 
   map.on('click', e => {
     const lat = +e.latlng.lat.toFixed(3), lon = +(((e.latlng.lng + 540) % 360) - 180).toFixed(3);
     onSelect({ kind: 'point', lat, lon });
   });
-  map.on('overlayadd', e => { if (e.layer === eventLayer) loadEvents(); });
+  map.on('overlayadd', e => { if (e.layer === eventLayer) loadEvents(); if (e.layer === volcLayer) drawVolcanoes(); if (e.layer === tubeLayer) drawTubes(); });
   drawSites();
   drawCandidates();
   legend();
@@ -64,9 +70,10 @@ export function initMap(el, select) {
 export const getMap = () => map;
 export function invalidate() { map && setTimeout(() => map.invalidateSize(), 60); }
 
-export function legend(extra = '') {
+let legendNote = '';
+export function legend() {
   const t = target();
-  document.getElementById('legend').innerHTML = `<b>${esc(t.name)}</b> analog score<div class="bar"></div><div class="row"><span>0 poor</span><span>50</span><span>100 exceptional</span></div>${extra}<div class="muted" style="margin-top:4px">Tap anywhere on the map to score that spot.</div>`;
+  document.getElementById('legend').innerHTML = `<b>${esc(t.name)}</b> analog score<div class="bar"></div><div class="row"><span>0 poor</span><span>50</span><span>100 exceptional</span></div>${legendNote ? `<div class="muted" style="margin-top:4px">${esc(legendNote)}</div>` : ''}<div class="muted" style="margin-top:4px">Tap anywhere on the map to score that spot.</div>`;
 }
 
 export function drawSites() {
@@ -113,8 +120,9 @@ export async function loadEvents(force) {
     for (const e of data.events) {
       if (!e.g || e.g.type !== 'Point') continue;
       const [lon, lat] = e.g.c;
-      L.circleMarker([lat, lon], { radius: 5, color: EV_COLORS[e.cat] || '#fbbf24', weight: 2, fillOpacity: 0.6 })
-        .bindPopup(`<b>${esc(e.title)}</b><br>${esc(e.catTitle)} · ${esc(new Date(e.g.date).toUTCString().slice(5, 16))}<br><a href="${esc(e.link)}" target="_blank" rel="noopener">Source</a>`)
+      const link = safeUrl(e.link);
+      L.circleMarker([lat, lon], { radius: 5, color: EV_COLORS[e.cat] || '#fbbf24', weight: 2, fillOpacity: 0.6, bubblingMouseEvents: false })
+        .bindPopup(`<b>${esc(e.title)}</b><br>${esc(e.catTitle)} · ${esc(new Date(e.g.date).toUTCString().slice(5, 16))}${link ? `<br><a href="${esc(link)}" target="_blank" rel="noopener">Source</a>` : ''}`)
         .addTo(eventLayer);
     }
     eventsLoaded = true;
@@ -142,7 +150,10 @@ export async function runScan(lat, lon, ui) {
   const rect = L.rectangle([[box.s, box.w], [box.n, box.e]], { color: '#6ea8ff', weight: 1, dashArray: '4 4', fill: false }).addTo(heatLayer);
   ui.start(t, box);
   try {
-    const res = await scan(t, box, { mission: state.mission, signal: scanCtl.signal, onProgress: ui.progress });
+    const mission = state.mission;
+    const res = await scan(t, box, { mission, signal: scanCtl.signal, onProgress: ui.progress });
+    // Results are only valid for the target and mission they were computed for.
+    if (target().id !== t.id || state.mission !== mission) { heatLayer.clearLayers(); ui.fail(new Error('the target or mission changed while scanning; run the scan again')); return; }
     mark('NASA POWER regional', true);
     if (res.jaxa) mark('JAXA Earth API', true);
     const r = L.canvas({ padding: 0.2 });
@@ -168,4 +179,20 @@ export function missionOptions(sel) {
 export function targetOptions(sel) {
   return ['moon', 'mars'].map(b => `<optgroup label="${b === 'moon' ? 'Moon' : 'Mars'}">${TARGETS.filter(t => t.body === b).map(t => `<option value="${t.id}"${t.id === sel ? ' selected' : ''}>${esc(t.name)}</option>`).join('')}</optgroup>`).join('');
 }
-export { fmt, set };
+
+// ---------- cave evidence layers ----------
+async function drawVolcanoes() {
+  if (volcLayer.getLayers().length) return;
+  const r = L.canvas({ padding: 0.3 });
+  for (const v of await loadVolcanoes().catch(() => [])) {
+    const lava = v[4] && v[5] !== 0;
+    L.circleMarker([v[0], v[1]], { renderer: r, radius: lava ? 4 : 3, weight: 1, color: lava ? '#ef4444' : '#a16207', fillOpacity: 0.7, bubblingMouseEvents: false })
+      .bindTooltip(`<b>${esc(v[2])}</b><br>${esc(v[3])}${v[5] === 1 ? ' · basaltic' : ''} · ${v[6] === 'H' ? 'Holocene' : 'Pleistocene'}${lava ? '<br>Lava-flow volcano (can form lava tubes)' : ''}`)
+      .addTo(volcLayer);
+  }
+}
+function drawTubes() {
+  if (tubeLayer.getLayers().length) return;
+  for (const t of LAVA_TUBES) L.circleMarker([t.lat, t.lon], { radius: 6, weight: 2, color: '#fff', fillColor: '#8b5cf6', fillOpacity: 0.9, bubblingMouseEvents: false })
+    .bindTooltip(`<b>${esc(t.n)}</b><br>${esc(t.r)}<br>Documented lava-tube cave`).addTo(tubeLayer);
+}

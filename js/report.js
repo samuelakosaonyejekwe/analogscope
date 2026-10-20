@@ -1,9 +1,10 @@
 // Site report: full characterisation of a documented site or any tapped point.
 import { state, set, target, site, siteProfile, toast, fmt, ago, scoreColor, mark } from './state.js';
-import { TARGETS, VARIABLES, GEOLOGY, MISSIONS } from './targets.js';
+import { TARGETS, VARIABLES, GEOLOGY, MISSIONS, GAPS, PLANET } from './targets.js';
+import { caveEvidence, LEVEL_TEXT } from './evidence.js';
 import { evaluate, rankTargets, monthly, liveScore, explain, grade } from './engine.js';
 import { profile, powerRecent, live, haversine, LC_NAMES, store } from './data.js';
-import { radar, monthBars, spark, gauge, esc } from './charts.js';
+import { radar, monthBars, spark, gauge, esc, safeUrl } from './charts.js';
 
 let token = 0;
 
@@ -20,10 +21,13 @@ export async function renderReport(el, sel) {
   if (!place) { el.innerHTML = '<p class="empty">Site not found.</p>'; return; }
   let p = place.documented ? siteProfile(place.id) : null;
   el.innerHTML = header(place) + (p ? '' : skeleton());
+  // Cave evidence comes from bundled data, so it is available offline.
+  place.evidence = await caveEvidence(place.lat, place.lon).catch(() => null);
+  if (my !== token) return;
   if (p) draw(el, place, p);
   // Refresh from NASA/JAXA in the background (normals are cached for 30 days).
   try {
-    const fresh = await profile(place.lat, place.lon);
+    const fresh = await profile(place.lat, place.lon, { fallback: p });
     mark('NASA POWER', fresh.sources.power); mark('SRTM terrain', fresh.sources.terrain); mark('JAXA Earth API', fresh.sources.jaxa);
     if (my !== token) return;
     if (!p || fresh.t !== p.t) { p = fresh; draw(el, place, p); }
@@ -46,10 +50,11 @@ const skeleton = () => `<div class="card"><div class="skeleton" style="width:60%
 
 function draw(el, place, p) {
   const t = target();
-  const ev = evaluate(t, p.ann, place.tags, state.mission);
+  const evi = place.evidence?.tags;
+  const ev = evaluate(t, p.ann, place.tags, state.mission, evi);
   const g = grade(ev.score);
-  const all = rankTargets(p.ann, place.tags, state.mission);
-  const mon = monthly(t, p, place.tags, state.mission);
+  const all = rankTargets(p.ann, place.tags, state.mission, evi);
+  const mon = monthly(t, p, place.tags, state.mission, evi);
   const best = mon ? [...mon].filter(m => m.score != null).sort((a, b) => b.score - a.score).slice(0, 3).map(m => m.m) : [];
   const rows = ev.env.rows.map(r => ({ ...r, short: VARIABLES[r.v].short }));
   const color = t.body === 'mars' ? 'var(--mars)' : 'var(--moon)';
@@ -80,14 +85,17 @@ function draw(el, place, p) {
   </div>
 
   <div class="card"><h3>Geology ${place.documented ? '' : '<span class="tag">tap to add what you know</span>'}</h3>
-    <div>${(place.documented ? Object.keys(GEOLOGY).filter(k => place.tags.includes(k) || t.geo.includes(k)) : Object.keys(GEOLOGY)).map(k => {
+    <div>${(place.documented ? Object.keys(GEOLOGY).filter(k => place.tags.includes(k) || t.geo.includes(k)) : Object.keys(GEOLOGY).filter(k => k !== 'lavaprone')).map(k => {
       const has = place.tags.includes(k), want = t.geo.includes(k);
       return place.documented
         ? `<span class="tag ${has && want ? 'hit' : ''}" title="${want ? 'Target geology' : ''}">${has ? '✓ ' : '○ '}${esc(GEOLOGY[k])}</span>`
         : `<button type="button" class="tag ${has ? 'hit' : ''}" data-geo="${k}" aria-pressed="${has}" style="cursor:pointer">${has ? '✓ ' : '+ '}${esc(GEOLOGY[k])}${want ? ' ★' : ''}</button>`;
     }).join('')}</div>
     <div class="muted" style="font-size:12px;margin-top:4px">✓ present at this site · ★/○ geology the target needs${p.ann.LC != null ? ` · ESA land cover: <b>${esc(LC_NAMES[p.ann.LC] || p.ann.LC)}</b>` : ''}</div>
+    ${evidenceHtml(place.evidence)}
   </div>
+
+  ${gapsHtml(t, p, ev)}
 
   <div class="card"><h3>When to run a field campaign</h3>
     ${mon ? monthBars(mon) + `<p style="margin:6px 0 0;font-size:13.5px">Conditions match <b>${esc(t.name)}</b> most closely in <b>${best.join(', ')}</b>, based on NASA POWER monthly normals for 2001–2020.</p>` : '<p class="muted">Monthly data not available.</p>'}
@@ -161,7 +169,8 @@ async function loadLive(el, place, p, my) {
       if (my !== token) return;
       const ic = el.querySelector('#imgCard'); if (!ic) return;
       const its = data.items.filter(i => i.thumb).slice(0, 6);
-      ic.innerHTML = `<h3>From NASA's image library</h3>` + (its.length ? `<div class="thumbs">${its.map(i => `<a href="https://images.nasa.gov/details/${encodeURIComponent(i.id)}" target="_blank" rel="noopener" title="${esc(i.title)}"><img loading="lazy" decoding="async" src="${esc(i.thumb)}" alt="${esc(i.title)}"></a>`).join('')}</div>` : '<p class="muted" style="margin:0">No archive images matched this site name.</p>');
+      const its2 = its.filter(i => safeUrl(i.thumb));
+      ic.innerHTML = `<h3>From NASA's image library</h3>` + (its2.length ? `<div class="thumbs">${its2.map(i => `<a href="https://images.nasa.gov/details/${encodeURIComponent(i.id)}" target="_blank" rel="noopener" title="${esc(i.title)}"><img loading="lazy" decoding="async" src="${esc(safeUrl(i.thumb))}" alt="${esc(i.title)}"></a>`).join('')}</div>` : '<p class="muted" style="margin:0">No archive images matched this site name.</p>');
       mark('NASA Image Library', true);
     }).catch(() => { const ic = el.querySelector('#imgCard'); if (ic) ic.remove(); });
   }
@@ -173,8 +182,8 @@ function paintLive(el, place, p, rec, t, cachedAt) {
   const m = new Date().getUTCMonth();
   const normT = p.months?.T2M?.[m];
   const mean = (a, k = 30) => { const v = a.slice(-k).filter(x => x != null); return v.length ? v.reduce((x, y) => x + y, 0) / v.length : null; };
-  const ls = liveScore(t, p, rec, place.tags, state.mission);
-  const base = evaluate(t, p.ann, place.tags, state.mission).score;
+  const ls = liveScore(t, p, rec, place.tags, state.mission, place.evidence?.tags);
+  const base = evaluate(t, p.ann, place.tags, state.mission, place.evidence?.tags).score;
   const d = ls?.score != null && base != null ? ls.score - base : null;
   const lastDate = rec.dates[rec.dates.length - 1];
   const nice = lastDate ? `${lastDate.slice(0, 4)}-${lastDate.slice(4, 6)}-${lastDate.slice(6)}` : '–';
@@ -198,7 +207,7 @@ function act(a, place, p, ev) {
     if (navigator.share) navigator.share({ title: `AnalogScope · ${place.name}`, text: `${place.name}: ${ev.score}/100 as a ${t.name} analog`, url }).catch(() => {});
     else navigator.clipboard?.writeText(url).then(() => toast('Link copied'), () => toast(url, 6000));
   } else if (a === 'json') {
-    const out = { app: 'AnalogScope', generated: new Date().toISOString(), place: { name: place.name, lat: place.lat, lon: place.lon, geology: place.tags }, target: t.name, mission: state.mission, score: ev.score, environmental: ev.env.score, geologic: ev.geo?.score ?? null, factors: ev.env.rows.map(r => ({ variable: r.v, label: VARIABLES[r.v].label, value: r.x, unit: VARIABLES[r.v].unit, fit: r.s, weight: r.w, source: VARIABLES[r.v].src })), allTargets: TARGETS.map(x => ({ target: x.name, score: evaluate(x, p.ann, place.tags, state.mission).score })), data: p };
+    const out = { app: 'AnalogScope', generated: new Date().toISOString(), place: { name: place.name, lat: place.lat, lon: place.lon, geology: place.tags }, target: t.name, mission: state.mission, score: ev.score, environmental: ev.env.score, geologic: ev.geo?.score ?? null, factors: ev.env.rows.map(r => ({ variable: r.v, label: VARIABLES[r.v].label, value: r.x, unit: VARIABLES[r.v].unit, fit: r.s, weight: r.w, source: VARIABLES[r.v].src })), allTargets: TARGETS.map(x => ({ target: x.name, score: evaluate(x, p.ann, place.tags, state.mission, place.evidence?.tags).score })), caveEvidence: place.evidence, data: p };
     const b = new Blob([JSON.stringify(out, null, 2)], { type: 'application/json' });
     const u = URL.createObjectURL(b), l = Object.assign(document.createElement('a'), { href: u, download: `analogscope-${(place.name || 'site').replace(/\W+/g, '-').toLowerCase()}.json` });
     l.click(); setTimeout(() => URL.revokeObjectURL(u), 1000);
@@ -209,4 +218,34 @@ function act(a, place, p, ev) {
     set({ candidates: [{ name, lat: place.lat, lon: place.lon, t: Date.now() }, ...state.candidates.filter(c => !(Math.abs(c.lat - place.lat) < 0.005 && Math.abs(c.lon - place.lon) < 0.005))].slice(0, 200) });
     toast('Saved to My candidates (stored on this device)');
   }
+}
+
+function evidenceHtml(e) {
+  if (!e) return '';
+  const lines = [];
+  if (e.tube) lines.push(`Documented lava tube: <b>${esc(e.tube.n)}</b> (${esc(e.tube.r)}), ${e.tube.km} km away`);
+  if (e.effusive) lines.push(`Nearest lava-flow volcano: <b>${esc(e.effusive.name)}</b> (${esc(e.effusive.type)}${e.effusive.basaltic === 1 ? ', basaltic' : ''}, ${esc(e.effusive.epoch)}), ${e.effusive.km} km away`);
+  else if (e.nearest) lines.push(`Nearest volcano: <b>${esc(e.nearest.name)}</b> (${esc(e.nearest.type)}), ${e.nearest.km} km away`);
+  const cls = e.level === 'confirmed' ? 'ok' : e.level === 'none' ? 'muted' : 'warn';
+  return `<div style="margin-top:10px;font-size:13px"><b>Cave evidence:</b> <span class="${cls}">${esc(LEVEL_TEXT[e.level])}</span>
+    ${lines.length ? `<ul class="list" style="margin-top:4px">${lines.map(l => `<li><span class="dot" style="background:var(--accent)"></span><span>${l}</span></li>`).join('')}</ul>` : ''}
+    <div class="muted" style="font-size:11.5px;margin-top:2px">Sources: Smithsonian Global Volcanism Program (2,666 volcanoes) and a list of documented lava-tube caves. The cave targets use this evidence automatically.</div></div>`;
+}
+
+export function gapsHtml(t, p, ev) {
+  const a = p.ann, rows = GAPS[t.body];
+  const M = PLANET.mars, L = PLANET.moon;
+  const site = g => {
+    if (g.site === 'PS' && a.PS != null) return t.body === 'mars' ? `${fmt(a.PS, 1)} kPa here: about ${fmt(a.PS / M.pressureKPa, 0)}× denser than the Mars average` : `${fmt(a.PS, 1)} kPa here, nowhere near vacuum`;
+    if (g.site === 'T2M' && a.T2M != null) return `${fmt(a.T2M, 1)} °C mean here: ${fmt(a.T2M - M.meanTempC, 0)} °C warmer than the Mars average`;
+    if (g.site === 'LST_SWING') {
+      if (a.LST_SWING != null) return `${fmt(a.LST_SWING, 1)} °C ground day–night swing here, vs ≈ ${L.surfaceSwingC} °C on the Moon`;
+      if (a.T2M_RANGE != null) return `${fmt(a.T2M_RANGE, 1)} °C daily air swing here (no ground data), vs ≈ ${L.surfaceSwingC} °C surface swing on the Moon`;
+    }
+    return 'Not reproducible outdoors on Earth';
+  };
+  const good = ev.env.rows.filter(r => r.s != null && r.s >= 0.7).length, n = ev.env.rows.filter(r => r.s != null).length;
+  return `<div class="card"><h3>What no Earth site can reproduce</h3>
+    <p style="margin:0 0 8px;font-size:13.5px">This site matches <b>${good} of ${n}</b> measured factors well (fit ≥ 70 %). For the conditions below, missions combine field tests here with lab facilities:</p>
+    <table class="cmp">${rows.map(g => `<tr><td><b>${esc(g.what)}</b><div class="muted" style="font-size:12px">${esc(t.body === 'moon' ? 'Moon' : 'Mars')}: ${esc(g.planet)}</div><div style="font-size:12px">${esc(site(g))}</div></td><td style="font-size:12.5px">${esc(g.lab)}</td></tr>`).join('')}</table></div>`;
 }

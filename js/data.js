@@ -2,6 +2,8 @@
 // the agency's public API: no keys, servers or backend of our own.
 // Results are cached locally so the app keeps working offline.
 
+import { remsClimatology } from './mars.js';
+
 const POWER = 'https://power.larc.nasa.gov/api/temporal';
 const POWER_PARAMS = ['T2M', 'T2M_RANGE', 'PRECTOTCORR', 'RH2M', 'ALLSKY_SFC_UV_INDEX', 'ALLSKY_SFC_SW_DWN', 'PS', 'CLOUD_AMT', 'WS2M'];
 const POWER_KEY = { T2M: 'T2M', T2M_RANGE: 'T2M_RANGE', PRECTOTCORR: 'PRECIP', RH2M: 'RH2M', ALLSKY_SFC_UV_INDEX: 'UV', ALLSKY_SFC_SW_DWN: 'SOLAR', PS: 'PS', CLOUD_AMT: 'CLOUD', WS2M: 'WIND' };
@@ -34,6 +36,9 @@ export async function getJSON(url, { timeout = 20000, signal } = {}) {
   } finally { clearTimeout(t); }
 }
 
+// Bump when the shape or meaning of cached location profiles changes.
+export const PROFILE_KEY = (lat, lon) => `p2:${lat.toFixed(2)},${lon.toFixed(2)}`;
+
 const store = {
   get(k) { try { const v = localStorage.getItem('as:' + k); return v ? JSON.parse(v) : null; } catch { return null; } },
   set(k, v) {
@@ -41,7 +46,7 @@ const store = {
     catch {
       // Quota reached: drop the oldest cached profiles and retry once.
       try {
-        const keys = Object.keys(localStorage).filter(x => x.startsWith('as:p:'));
+        const keys = Object.keys(localStorage).filter(x => /^as:(p\d*|r):/.test(x));
         keys.slice(0, Math.ceil(keys.length / 2)).forEach(x => localStorage.removeItem(x));
         localStorage.setItem('as:' + k, JSON.stringify(v));
       } catch { /* storage unavailable */ }
@@ -122,27 +127,46 @@ async function terrainTile(z, x, y) {
   return p;
 }
 
+/**
+ * Elevation, relief and slope around a point. Pixels are addressed globally so the
+ * sampling window can span neighbouring tiles. Web Mercator tiles stop at ±85.05°.
+ */
 export async function terrainAt(lat, lon, z = 10, win = 10) {
-  const { x, y } = tileXY(lat, lon, z);
-  const tx = Math.floor(x), ty = Math.floor(y);
-  const e = await terrainTile(z, tx, ty);
-  const px = Math.min(255, Math.floor((x - tx) * 256)), py = Math.min(255, Math.floor((y - ty) * 256));
-  const at = (i, j) => e[Math.max(0, Math.min(255, j)) * 256 + Math.max(0, Math.min(255, i))];
-  const cell = 40075016.686 * Math.cos(lat * Math.PI / 180) / (256 * 2 ** z);
-  let lo = Infinity, hi = -Infinity, slopeSum = 0, n = 0;
-  for (let j = py - win; j <= py + win; j++) for (let i = px - win; i <= px + win; i++) {
+  if (Math.abs(lat) > 85) throw new Error('outside terrain tile coverage');
+  const n = 2 ** z, { x, y } = tileXY(lat, lon, z);
+  const gx = Math.floor(x * 256), gy = Math.floor(y * 256), reach = Math.max(win, 4);
+  const tiles = new Map();
+  const need = [];
+  for (const ty of new Set([gy - reach, gy + reach].map(v => Math.floor(v / 256))))
+    for (const tx of new Set([gx - reach, gx + reach].map(v => Math.floor(v / 256))))
+      if (ty >= 0 && ty < n) need.push([((tx % n) + n) % n, ty]);
+  await Promise.all(need.map(async ([tx, ty]) => tiles.set(`${tx},${ty}`, await terrainTile(z, tx, ty))));
+  const at = (i, j) => {
+    j = Math.max(0, Math.min(n * 256 - 1, j));
+    const tx = ((Math.floor(i / 256) % n) + n) % n, ty = Math.floor(j / 256);
+    const t = tiles.get(`${tx},${ty}`);
+    return t ? t[(j - ty * 256) * 256 + (((i % 256) + 256) % 256)] : NaN;
+  };
+  const cell = 40075016.686 * Math.cos(lat * Math.PI / 180) / (256 * n);
+  let lo = Infinity, hi = -Infinity, slopeSum = 0, k = 0;
+  for (let j = gy - win; j <= gy + win; j++) for (let i = gx - win; i <= gx + win; i++) {
     const v = at(i, j); if (v < lo) lo = v; if (v > hi) hi = v;
   }
-  for (let j = py - 3; j <= py + 3; j++) for (let i = px - 3; i <= px + 3; i++) {
+  for (let j = gy - 3; j <= gy + 3; j++) for (let i = gx - 3; i <= gx + 3; i++) {
     const dx = (at(i + 1, j) - at(i - 1, j)) / (2 * cell), dy = (at(i, j + 1) - at(i, j - 1)) / (2 * cell);
-    slopeSum += Math.atan(Math.hypot(dx, dy)) * 180 / Math.PI; n++;
+    if (isFinite(dx) && isFinite(dy)) { slopeSum += Math.atan(Math.hypot(dx, dy)) * 180 / Math.PI; k++; }
   }
-  return { ELEV: round(at(px, py), 0), RELIEF: round(hi - lo, 0), SLOPE: round(slopeSum / n, 1) };
+  return { ELEV: round(at(gx, gy), 0), RELIEF: isFinite(hi - lo) ? round(hi - lo, 0) : null, SLOPE: k ? round(slopeSum / k, 1) : null };
 }
 
 // ---------- JAXA Earth API (GCOM-C, GCOM-W, MODIS normals; ESA/C3S land cover) ----------
 let jeLib = null;
 const loadJaxa = () => (jeLib ??= import(JAXA_LIB).catch(e => { jeLib = null; throw e; }));
+
+// JAXA layers are monthly normals. Annual values are the mean of four seasonal
+// months so they match NASA POWER's annual normals and do not depend on when the
+// data were fetched.
+export const SEASON_MONTHS = [0, 3, 6, 9];
 
 async function jaxaGrid(key, box, w, h, month) {
   // The JAXA library fails noisily without a network, so skip it when offline.
@@ -150,7 +174,9 @@ async function jaxaGrid(key, box, w, h, month) {
   const je = await loadJaxa();
   const d = JAXA[key];
   const date = d.year ? new Date(Date.UTC(d.year, 0, 1)) : new Date(Date.UTC(2020, month, 1));
-  const img = await je.getImage({ collection: d.url, band: d.band, date, bbox: [box.w, box.s, box.e, box.n], width: w, height: h });
+  // An explicit colour range only affects rendering (raw values are returned) and stops
+  // the library logging errors when a raster is uniform or empty.
+  const img = await je.getImage({ collection: d.url, band: d.band, date, bbox: [box.w, box.s, box.e, box.n], width: w, height: h, colorMap: { min: 0, max: 1 } });
   return img.getData();
 }
 
@@ -170,50 +196,94 @@ export const LC_NAMES = { 10: 'Cropland', 11: 'Cropland', 12: 'Cropland', 20: 'I
 
 const median = a => { const v = a.filter(x => x != null && isFinite(x)).sort((p, q) => p - q); return v.length ? v[v.length >> 1] : null; };
 
-/** Point values from JAXA rasters, using a 3x3 sample over ~0.1° for stability. */
-export async function jaxaPoint(lat, lon, month = new Date().getUTCMonth()) {
-  const d = 0.05, box = { w: lon - d, e: lon + d, s: lat - d, n: lat + d };
-  const get = k => jaxaGrid(k, box, 3, 3, month).then(r => Array.from(r.data)).catch(() => null);
-  const [ndvi, lstd, lstn, smc, lc] = await Promise.all(['NDVI', 'LSTD', 'LSTN', 'SOILM', 'LC'].map(get));
-  const D = median(lstd || []), N = median(lstn || []);
-  const lcv = lc ? lc[4] ?? median(lc) : null;
+const mean = a => { const v = a.filter(x => x != null && isFinite(x)); return v.length ? v.reduce((p, q) => p + q, 0) / v.length : null; };
+
+/**
+ * Combine per-season samples into annual values. `seasons[k]` holds the value of
+ * layer k for each season month (null where the sensor has no data, e.g. polar night).
+ * The ground swing uses only seasons where both day and night were observed.
+ */
+function annualJaxa(ndvi, lstd, lstn, smc, lc) {
+  const pairs = lstd.map((d, i) => (d != null && lstn[i] != null ? d - lstn[i] : null));
+  const D = mean(lstd), N = mean(lstn), lcv = lc == null || !isFinite(lc) ? null : Math.round(lc);
   return {
-    NDVI: round(median(ndvi || []), 3),
+    NDVI: round(mean(ndvi), 3),
     LST_DAY: D == null ? null : round(D - 273.15, 1),
     LST_NIGHT: N == null ? null : round(N - 273.15, 1),
-    LST_SWING: D == null || N == null ? null : round(D - N, 1),
-    SOILM: round(median(smc || []), 1),
-    LC: lcv == null || !isFinite(lcv) ? null : Math.round(lcv),
-    BARREN: barrenness(lcv == null ? null : Math.round(lcv)),
-    month,
+    LST_SWING: round(mean(pairs), 1),
+    SOILM: round(mean(smc), 1),
+    LC: lcv,
+    BARREN: barrenness(lcv),
   };
 }
 
-/** Rasters over a scan box, w x h pixels, row 0 = north. */
-export async function jaxaRegion(box, w, h, month) {
-  const keys = ['NDVI', 'LSTD', 'LSTN', 'SOILM', 'LC'];
-  const res = await Promise.all(keys.map(k => jaxaGrid(k, box, w, h, month).then(r => r.data).catch(() => null)));
-  return Object.fromEntries(keys.map((k, i) => [k, res[i]]));
+/** Point values from JAXA rasters: a 3x3 sample over ~0.1° for each season month. */
+export async function jaxaPoint(lat, lon) {
+  const d = 0.05, box = { w: lon - d, e: lon + d, s: lat - d, n: lat + d };
+  const get = (k, m) => jaxaGrid(k, box, 3, 3, m).then(r => median(Array.from(r.data))).catch(() => null);
+  const seasonal = k => Promise.all(SEASON_MONTHS.map(m => get(k, m)));
+  const [ndvi, lstd, lstn, smc, lcArr] = await Promise.all([
+    seasonal('NDVI'), seasonal('LSTD'), seasonal('LSTN'), seasonal('SOILM'),
+    jaxaGrid('LC', box, 3, 3, 0).then(r => Array.from(r.data)).catch(() => null),
+  ]);
+  if (![...ndvi, ...lstd, ...lstn, ...smc].some(v => v != null) && !lcArr) throw new Error('JAXA unavailable');
+  const centre = lcArr && isFinite(lcArr[4]) ? lcArr[4] : lcArr ? median(lcArr) : null;
+  return annualJaxa(ndvi, lstd, lstn, smc, centre);
+}
+
+/** Annual rasters over a scan box, w x h pixels, row 0 = north. */
+export async function jaxaRegion(box, w, h) {
+  const layers = ['NDVI', 'LSTD', 'LSTN', 'SOILM'];
+  const grid = (k, m) => jaxaGrid(k, box, w, h, m).then(r => r.data).catch(() => null);
+  const [seasonal, lc] = await Promise.all([
+    Promise.all(layers.map(k => Promise.all(SEASON_MONTHS.map(m => grid(k, m))))),
+    grid('LC', 0),
+  ]);
+  if (!seasonal.flat().some(Boolean) && !lc) return null;
+  const at = (arr, i) => (arr && arr[i] != null && isFinite(arr[i]) ? arr[i] : null);
+  const out = { NDVI: [], LST_DAY: [], LST_NIGHT: [], LST_SWING: [], SOILM: [], LC: [], BARREN: [] };
+  for (let i = 0; i < w * h; i++) {
+    const v = annualJaxa(...seasonal.map(ms => ms.map(a => at(a, i))), at(lc, i));
+    for (const k in out) out[k].push(v[k]);
+  }
+  return out;
 }
 
 // ---------- Full profile of a location ----------
-export async function profile(lat, lon, { useCache = true } = {}) {
-  const key = `p:${lat.toFixed(2)},${lon.toFixed(2)}`;
+const POWER_VARS = ['T2M', 'T2M_RANGE', 'PRECIP', 'RH2M', 'UV', 'SOLAR', 'PS', 'CLOUD', 'WIND'];
+const TERRAIN_VARS = ['ELEV', 'RELIEF', 'SLOPE'];
+const JAXA_VARS = ['NDVI', 'LST_DAY', 'LST_NIGHT', 'LST_SWING', 'SOILM', 'LC', 'BARREN'];
+const pick = (o, keys) => Object.fromEntries(keys.map(k => [k, o?.[k] ?? null]));
+
+/**
+ * Full profile of a location. `fallback` (a cached or bundled profile) supplies the
+ * values of any source that fails this time, so a partial outage never blanks data
+ * that was already known.
+ */
+export async function profile(lat, lon, { useCache = true, fallback = null } = {}) {
+  const key = PROFILE_KEY(lat, lon);
   const k = memo.get(key) || (useCache && store.get(key));
   if (k && Date.now() - k.t < 30 * 864e5) return k;
+  const prev = k || fallback;
   const [clim, terr, jx] = await Promise.allSettled([powerClimatology(lat, lon), terrainAt(lat, lon), jaxaPoint(lat, lon)]);
   if (clim.status === 'rejected' && terr.status === 'rejected' && jx.status === 'rejected') {
-    if (k) return k;
+    if (prev) return prev;
     throw new Error('No data reachable for this point (offline?)');
   }
+  const ok = { power: clim.status === 'fulfilled', terrain: terr.status === 'fulfilled', jaxa: jx.status === 'fulfilled' };
   const p = {
     lat, lon, t: Date.now(),
-    ann: { ...(clim.value?.ann || {}), ...(terr.value || {}), ...(jx.value || {}), ABSLAT: round(Math.abs(lat), 1) },
-    months: clim.value?.months || null,
-    sources: { power: clim.status === 'fulfilled', terrain: terr.status === 'fulfilled', jaxa: jx.status === 'fulfilled' && jx.value.NDVI != null },
+    ann: {
+      ...(ok.power ? pick(clim.value.ann, POWER_VARS) : pick(prev?.ann, POWER_VARS)),
+      ...(ok.terrain ? pick(terr.value, TERRAIN_VARS) : pick(prev?.ann, TERRAIN_VARS)),
+      ...(ok.jaxa ? pick(jx.value, JAXA_VARS) : pick(prev?.ann, JAXA_VARS)),
+      ABSLAT: round(Math.abs(lat), 1),
+    },
+    months: ok.power ? clim.value.months : prev?.months || null,
+    sources: ok,
   };
-  memo.set(key, p);
-  store.set(key, p);
+  // Only cache complete refreshes; partial ones are retried next time.
+  if (ok.power && ok.terrain && ok.jaxa) { memo.set(key, p); store.set(key, p); }
   return p;
 }
 
@@ -224,15 +294,41 @@ export const feeds = {
   xray: () => getJSON('https://services.swpc.noaa.gov/json/goes/primary/xrays-1-day.json'),
   quakes: () => getJSON('https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/4.5_week.geojson'),
   marsWeather: () => getJSON('https://mars.nasa.gov/rss/api/?feed=weather&category=msl&feedtype=json', { timeout: 30000 }),
-  apod: key => getJSON(`https://api.nasa.gov/planetary/apod?api_key=${encodeURIComponent(key || 'DEMO_KEY')}`),
+  apod: key => nasaPicture(key),
   images: q => getJSON(`https://images-api.nasa.gov/search?q=${encodeURIComponent(q)}&media_type=image&page_size=12`),
 };
+
+// NASA picture of the day: the APOD API first (retried once, since the shared
+// key is often busy), then NASA's Image of the Day feed as a fallback.
+async function nasaPicture(key) {
+  const apod = () => getJSON(`https://api.nasa.gov/planetary/apod?api_key=${encodeURIComponent(key || 'DEMO_KEY')}&thumbs=true`, { timeout: 12000 });
+  try {
+    const a = await apod().catch(() => new Promise(r => setTimeout(r, 1500)).then(apod));
+    // Videos have no image unless the API supplies a thumbnail.
+    const img = a.media_type === 'image' ? a.url : a.thumbnail_url || '';
+    return { source: 'apod', title: a.title, date: a.date, url: img, hdurl: a.hdurl || img, media_type: a.media_type, copyright: a.copyright, link: `https://apod.nasa.gov/apod/ap${a.date.slice(2).replace(/-/g, '')}.html` };
+  } catch {
+    const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 15000);
+    try {
+      const r = await fetch('https://www.nasa.gov/feeds/iotd-feed/', { mode: 'cors', credentials: 'omit', signal: ctl.signal });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const doc = new DOMParser().parseFromString(await r.text(), 'application/xml');
+      const it = doc.querySelector('item');
+      if (!it) throw new Error('empty feed');
+      const g = sel => it.querySelector(sel)?.textContent?.trim() || '';
+      const img = it.querySelector('enclosure')?.getAttribute('url') || '';
+      const d = new Date(g('pubDate'));
+      return { source: 'iotd', title: g('title'), date: isNaN(d) ? '' : d.toISOString().slice(0, 10), url: img, hdurl: img, media_type: 'image', link: g('link'), description: g('description') };
+    } finally { clearTimeout(t); }
+  }
+}
 
 /** Cached wrapper for live feeds: try the network first, fall back to the last copy we saved. */
 export async function live(name, arg, maxAgeMs = 0) {
   const k = 'f:' + name + (arg ? ':' + arg : '');
   const c = store.get(k);
-  if (c && maxAgeMs && Date.now() - c.t < maxAgeMs) return { data: c.data, t: c.t, cached: false };
+  // A recent copy counts as live while online; offline it is labelled as a saved copy.
+  if (c && ((maxAgeMs && Date.now() - c.t < maxAgeMs) || !navigator.onLine)) return { data: c.data, t: c.t, cached: !navigator.onLine };
   try {
     const data = await feeds[name](arg);
     const slim = slimFeed(name, data);
@@ -250,12 +346,30 @@ export async function live(name, arg, maxAgeMs = 0) {
 
 // Keep only what the UI needs so offline copies stay small.
 function slimFeed(name, d) {
-  if (name === 'marsWeather') return { soles: (d.soles || []).slice(0, 60) };
-  if (name === 'eonet') return { events: (d.events || []).map(e => ({ id: e.id, title: e.title, cat: e.categories?.[0]?.id, catTitle: e.categories?.[0]?.title, link: e.sources?.[0]?.url || e.link, g: (e.geometry || []).slice(-1).map(g => ({ date: g.date, type: g.type, c: g.coordinates, mag: g.magnitudeValue, unit: g.magnitudeUnit }))[0] })) };
+  if (name === 'marsWeather') return { soles: (d.soles || []).slice(0, 60), clim: remsClimatology(d.soles || []) };
+  if (name === 'eonet') return { events: (d.events || []).map(e => ({ id: e.id, title: e.title, cat: e.categories?.[0]?.id, catTitle: e.categories?.[0]?.title, link: e.sources?.[0]?.url || e.link, g: (e.geometry || []).slice(-1).map(g => ({ date: g.date, type: 'Point', c: g.type === 'Point' ? g.coordinates : centroid(g.coordinates), mag: g.magnitudeValue, unit: g.magnitudeUnit }))[0] })).filter(e => e.g && e.g.c) };
+  if (name === 'kp') {
+    // SWPC has published this as an array of objects and, earlier, as rows with a header row.
+    const rows = Array.isArray(d[0]) ? d.slice(1).map(r => [r[0], +r[1]]) : d.map(r => [r.time_tag, +r.Kp]);
+    return rows.filter(r => isFinite(r[1]));
+  }
   if (name === 'quakes') return { features: (d.features || []).map(f => ({ mag: f.properties.mag, place: f.properties.place, time: f.properties.time, url: f.properties.url, c: f.geometry.coordinates })) };
-  if (name === 'xray') return d.filter(x => x.energy === '0.1-0.8nm').slice(-288).map(x => ({ t: x.time_tag, f: x.flux }));
+  if (name === 'xray') {
+    // 1-minute data for 24 h; keep every 5th point so the chart still spans the whole day.
+    const e = d.filter(x => x.energy === '0.1-0.8nm' && x.flux > 0);
+    return e.filter((_, i) => i % 5 === 0 || i === e.length - 1).map(x => ({ t: x.time_tag, f: x.flux }));
+  }
   if (name === 'images') return { items: (d.collection?.items || []).slice(0, 12).map(i => ({ title: i.data?.[0]?.title, center: i.data?.[0]?.center, date: i.data?.[0]?.date_created, thumb: i.links?.find(l => l.rel === 'preview')?.href, id: i.data?.[0]?.nasa_id })) };
   return d;
+}
+
+function centroid(c) {
+  // Polygon / MultiPolygon: average of the outer ring's vertices.
+  let ring = c;
+  while (Array.isArray(ring?.[0]?.[0])) ring = ring[0];
+  if (!Array.isArray(ring) || !ring.length) return null;
+  const n = ring.length;
+  return [ring.reduce((a, p) => a + p[0], 0) / n, ring.reduce((a, p) => a + p[1], 0) / n];
 }
 
 export function haversine(a, b, c, d) {

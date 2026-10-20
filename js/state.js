@@ -1,24 +1,31 @@
 // Shared app state, persisted per device.
-import { store } from './data.js';
-import { TARGETS } from './targets.js';
+import { store, PROFILE_KEY } from './data.js';
+import { TARGETS, MISSIONS } from './targets.js';
+import { grade } from './engine.js';
 import { SITES } from './sites.js';
 
+// Saved state is validated field by field: anything stale, unknown or malformed
+// falls back to a default instead of breaking the app.
 const saved = store.get('state') || {};
+const okNum = (v, lim) => typeof v === 'number' && isFinite(v) && Math.abs(v) <= lim;
+const validSel = s => (s?.kind === 'site' && SITES.some(x => x.id === s.id)) || (s?.kind === 'point' && okNum(s.lat, 90) && okNum(s.lon, 180));
+const LAYER_IDS = ['bluemarble', 's2', 'viirs', 'modis', 'lst', 'relief'];
 export const state = {
   target: TARGETS.some(t => t.id === saved.target) ? saved.target : 'mars-jezero',
-  mission: saved.mission || 'balanced',
-  layer: saved.layer || 'bluemarble',
-  sel: saved.sel || { kind: 'site', id: 'atacama' },
-  candidates: Array.isArray(saved.candidates) ? saved.candidates.slice(0, 200) : [],
-  customGeo: saved.customGeo || {},
-  apiKey: saved.apiKey || '',
+  mission: MISSIONS[saved.mission] ? saved.mission : 'balanced',
+  layer: LAYER_IDS.includes(saved.layer) ? saved.layer : 'bluemarble',
+  sel: validSel(saved.sel) ? saved.sel : { kind: 'site', id: 'atacama' },
+  candidates: Array.isArray(saved.candidates) ? saved.candidates.filter(c => okNum(c?.lat, 90) && okNum(c?.lon, 180)).map(c => ({ ...c, name: String(c.name || 'Candidate').slice(0, 80) })).slice(0, 200) : [],
+  customGeo: saved.customGeo && typeof saved.customGeo === 'object' ? saved.customGeo : {},
+  apiKey: typeof saved.apiKey === 'string' ? saved.apiKey.slice(0, 64) : '',
   seenIntro: !!saved.seenIntro,
 };
+const PERSIST = Object.keys(state);
 
 const subs = new Set();
 export const onChange = fn => subs.add(fn);
 export function set(patch) {
-  Object.assign(state, patch);
+  for (const k of PERSIST) if (k in patch) state[k] = patch[k];
   store.set('state', state);
   subs.forEach(fn => fn(patch));
 }
@@ -37,13 +44,16 @@ export async function loadSnapshot() {
 }
 export function siteProfile(id) {
   const s = site(id);
-  const live = store.get(`p:${s.lat.toFixed(2)},${s.lon.toFixed(2)}`);
+  const live = store.get(PROFILE_KEY(s.lat, s.lon));
   return live || snapshot.sites[id] || null;
 }
 
 let toastT;
 export function toast(msg, ms = 2800) {
   const el = document.getElementById('toast');
+  // A modal dialog sits in the top layer; move the toast inside it so it stays visible.
+  const dlg = document.getElementById('dlg');
+  (dlg.open ? dlg : document.body).appendChild(el);
   el.textContent = msg; el.classList.add('show');
   clearTimeout(toastT); toastT = setTimeout(() => el.classList.remove('show'), ms);
 }
@@ -64,7 +74,7 @@ export const ago = t => {
   if (s < 86400) return `${Math.round(s / 3600)} h ago`;
   return `${Math.round(s / 86400)} d ago`;
 };
-export const scoreColor = s => s == null ? '#64748b' : s >= 80 ? '#34d399' : s >= 65 ? '#7dd3fc' : s >= 50 ? '#fbbf24' : s >= 35 ? '#fb923c' : '#f87171';
+export const scoreColor = s => grade(s).color;
 
 // Track which sources answered, for the status card.
 export const health = {};
