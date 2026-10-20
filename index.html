@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>AnalogScope – Earth analogs for Moon &amp; Mars</title>
+<meta name="description" content="Find, score and compare places on Earth that resemble future Moon and Mars base sites, using live open data from NASA, JAXA, ESA/Copernicus and NOAA. Works offline and can be installed.">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://data.earth.jaxa.jp; connect-src 'self' https://power.larc.nasa.gov https://eonet.gsfc.nasa.gov https://api.nasa.gov https://mars.nasa.gov https://images-api.nasa.gov https://services.swpc.noaa.gov https://earthquake.usgs.gov https://s3.amazonaws.com https://s3.ap-northeast-1.wasabisys.com https://data.earth.jaxa.jp https://gibs.earthdata.nasa.gov https://trek.nasa.gov https://tiles.maps.eox.at; img-src 'self' data: blob: https:; style-src 'self' 'unsafe-inline'; font-src 'self'; worker-src 'self'; manifest-src 'self'; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'none'">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<meta name="theme-color" content="#070b16" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#f4f6fb" media="(prefers-color-scheme: light)">
+<meta name="color-scheme" content="dark light">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="AnalogScope">
+<meta property="og:title" content="AnalogScope – Earth analogs for Moon & Mars">
+<meta property="og:description" content="Score any place on Earth as a stand-in for Moon and Mars base sites, using live NASA, JAXA, ESA and NOAA data.">
+<meta property="og:image" content="icons/og.png">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="icon" href="icons/icon-192.png" sizes="192x192">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="modulepreload" href="js/app.js">
+<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="vendor/leaflet/leaflet.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="top">
+  <a class="brand" href="#/map" aria-label="AnalogScope home">
+    <img src="icons/icon.svg" width="32" height="32" alt="">
+    <span><b>AnalogScope</b><small>Earth analogs for Moon &amp; Mars</small></span>
+  </a>
+  <div class="top-actions">
+    <span id="netPill" class="pill" role="status" aria-live="polite">Starting…</span>
+    <button id="installBtn" class="btn btn-install" type="button" aria-haspopup="dialog">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m0 0-5-5m5 5 5-5M4 19h16" /></svg><span>Install app</span>
+    </button>
+    <button id="themeBtn" class="icon-btn" type="button" aria-label="Switch light or dark theme" title="Theme">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 13A9 9 0 1 1 11 3a7 7 0 0 0 10 10z"/></svg>
+    </button>
+    <button id="helpBtn" class="icon-btn" type="button" aria-label="How to use AnalogScope" title="Guide">?</button>
+  </div>
+</header>
+
+<nav class="tabs" aria-label="Main">
+  <a href="#/map" data-view="map"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zm0 0v14m6-12v14"/></svg><span>Explore</span></a>
+  <a href="#/rank" data-view="rank"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10m6 10V4m6 16v-7m4 7H2"/></svg><span>Rankings</span></a>
+  <a href="#/twin" data-view="twin"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="7" cy="12" r="4"/><circle cx="17" cy="12" r="4"/></svg><span>Twin view</span></a>
+  <a href="#/live" data-view="live"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg><span>Live</span></a>
+  <a href="#/method" data-view="method"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v6m0-10v.5"/></svg><span>Method</span></a>
+</nav>
+
+<main id="main">
+  <!-- Explore -->
+  <section id="v-map" class="view" aria-label="Explore map">
+    <div class="controls">
+      <div class="chips" id="targetChips" role="radiogroup" aria-label="Target environment"></div>
+      <div class="ctl-row">
+        <label class="sel"><span>Mission</span><select id="missionSel" aria-label="Mission profile"></select></label>
+        <label class="sel"><span>Map</span><select id="layerSel" aria-label="Base map"></select></label>
+        <form id="searchForm" class="search" role="search" autocomplete="off">
+          <input id="searchIn" type="search" placeholder="Search a site, or enter lat, lon" aria-label="Search sites or coordinates" list="siteList">
+          <datalist id="siteList"></datalist>
+          <button class="btn" type="submit">Go</button>
+        </form>
+      </div>
+    </div>
+    <div class="stage">
+      <div id="map" class="map" aria-label="Interactive map: tap anywhere to score that location"></div>
+      <div class="map-legend" id="legend"></div>
+      <button id="locBtn" class="fab" type="button" title="Score my current location" aria-label="Score my current location">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3m0 14v3M2 12h3m14 0h3"/></svg>
+      </button>
+      <aside id="panel" class="panel" aria-label="Details">
+        <button class="sheet-handle" id="sheetHandle" type="button" aria-label="Expand or collapse details"></button>
+        <div class="panel-tabs" role="tablist">
+          <button role="tab" id="ptSite" aria-selected="true" data-p="site">Site report</button>
+          <button role="tab" id="ptScan" aria-selected="false" data-p="scan">Discover new analogs</button>
+        </div>
+        <div id="pSite" class="pbody" role="tabpanel"></div>
+        <div id="pScan" class="pbody" role="tabpanel" hidden></div>
+      </aside>
+    </div>
+  </section>
+
+  <!-- Rankings -->
+  <section id="v-rank" class="view page" hidden aria-label="Rankings">
+    <div class="page-head">
+      <h1>Analog rankings</h1>
+      <p class="lead">Every documented analog site, scored against the selected Moon or Mars target. Tap a row to open its full report.</p>
+      <div class="ctl-row">
+        <label class="sel"><span>Target</span><select id="rankTarget"></select></label>
+        <label class="sel"><span>Mission</span><select id="rankMission"></select></label>
+        <button id="csvBtn" class="btn" type="button">Download CSV</button>
+      </div>
+    </div>
+    <div id="matrix" class="matrix-wrap"></div>
+    <div id="rankTable"></div>
+  </section>
+
+  <!-- Twin view -->
+  <section id="v-twin" class="view page" hidden aria-label="Twin view">
+    <div class="page-head">
+      <h1>Twin view</h1>
+      <p class="lead">An Earth analog shown next to its Moon or Mars counterpart, with measured conditions compared side by side.</p>
+      <div class="ctl-row">
+        <label class="sel"><span>Earth site</span><select id="twinSite"></select></label>
+        <label class="sel"><span>Target</span><select id="twinTarget"></select></label>
+      </div>
+    </div>
+    <div class="twin-maps">
+      <figure><div id="twinEarth" class="map twin-map"></div><figcaption id="capEarth"></figcaption></figure>
+      <figure><div id="twinPlanet" class="map twin-map"></div><figcaption id="capPlanet"></figcaption></figure>
+    </div>
+    <div id="twinBody"></div>
+  </section>
+
+  <!-- Live -->
+  <section id="v-live" class="view page" hidden aria-label="Live data">
+    <div class="page-head">
+      <h1>Live feeds</h1>
+      <p class="lead">Current data from NASA, NOAA and USGS, fetched directly by your browser. If you go offline, the last copy you downloaded is shown with its timestamp.</p>
+      <button id="refreshBtn" class="btn" type="button">Refresh all</button>
+    </div>
+    <div class="grid" id="liveGrid"></div>
+  </section>
+
+  <!-- Method -->
+  <section id="v-method" class="view page prose" hidden aria-label="Method">
+    <div id="methodBody"></div>
+  </section>
+</main>
+
+<dialog id="dlg" aria-labelledby="dlgTitle">
+  <form method="dialog" class="dlg-inner">
+    <h2 id="dlgTitle"></h2>
+    <div id="dlgBody"></div>
+    <div class="dlg-actions"><button class="btn btn-primary" value="ok">Got it</button></div>
+  </form>
+</dialog>
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+<noscript><p class="noscript">AnalogScope needs JavaScript to fetch live data and draw maps.</p></noscript>
+<script src="vendor/leaflet/leaflet.js" defer></script>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>

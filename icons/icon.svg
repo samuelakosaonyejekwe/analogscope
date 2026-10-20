@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <radialGradient id="sky" cx="50%" cy="40%" r="75%"><stop offset="0" stop-color="#16244a"/><stop offset="1" stop-color="#050813"/></radialGradient>
+    <linearGradient id="earth" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#5fb4ff"/><stop offset="1" stop-color="#1d4fbf"/></linearGradient>
+    <linearGradient id="mars" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffa36c"/><stop offset="1" stop-color="#c2410c"/></linearGradient>
+    <linearGradient id="moon" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#eef1fb"/><stop offset="1" stop-color="#9aa6c4"/></linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#sky)"/>
+  <g fill="#fff" opacity=".8"><circle cx="88" cy="96" r="3"/><circle cx="420" cy="70" r="2.5"/><circle cx="452" cy="300" r="2"/><circle cx="60" cy="330" r="2"/><circle cx="300" cy="52" r="2"/></g>
+  <circle cx="256" cy="300" r="150" fill="url(#earth)"/>
+  <path d="M150 260c30-40 80-30 100-10s10 50-20 60-50 40-30 70c-40-10-70-60-50-120zM300 190c30 0 60 20 70 50s-20 30-40 20-50-20-50-40 0-30 20-30z" fill="#3fbf7f" opacity=".85"/>
+  <circle cx="128" cy="136" r="54" fill="url(#moon)"/>
+  <circle cx="112" cy="124" r="10" fill="#8791ad" opacity=".6"/><circle cx="146" cy="152" r="7" fill="#8791ad" opacity=".6"/>
+  <circle cx="396" cy="150" r="46" fill="url(#mars)"/>
+  <circle cx="384" cy="140" r="8" fill="#8f2d07" opacity=".5"/>
+  <g fill="none" stroke="#fff" stroke-width="14" stroke-linecap="round" opacity=".95">
+    <circle cx="256" cy="300" r="78"/><path d="M256 196v40M256 364v40M152 300h40M320 300h40"/>
+  </g>
+  <circle cx="256" cy="300" r="12" fill="#fff"/>
+</svg>
