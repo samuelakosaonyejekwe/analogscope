@@ -1,15 +1,22 @@
 // Cave evidence for the lava-tube targets, from two independent sources:
-//  1. documented lava-tube caves (curated list), which confirm caves are present;
+//  1. documented lava-tube caves (data/lavatubes.json: exact coordinates from Wikidata,
+//     built by tools/build_lavatubes.py), which confirm caves are present;
 //  2. the Smithsonian GVP volcano catalogue: basaltic shields, fissure vents and
 //     volcanic fields are where lava tubes form, so nearby ones make caves likely.
 
 import { haversine } from './data.js';
-import { LAVA_TUBES } from './lavatubes.js';
 
-let vols = null;
+let vols = null, tubes = null;
 export function loadVolcanoes() {
   return (vols ??= fetch('data/volcanoes.json').then(r => r.json()).then(j => j.v).catch(e => { vols = null; throw e; }));
 }
+/** Documented lava tubes as [lat, lon, name, wikidataId]. */
+export function loadTubes() {
+  return (tubes ??= fetch('data/lavatubes.json').then(r => r.json()).then(j => j.v).catch(e => { tubes = null; throw e; }));
+}
+/** Radius within which a documented lava tube confirms caves at a location. Lava-tube
+ *  systems run for kilometres to tens of kilometres (Kazumura Cave is 65 km long). */
+export const TUBE_KM = 30;
 
 /**
  * level: 'confirmed' (documented tube ≤ 30 km), 'likely' (Holocene basaltic effusive
@@ -17,14 +24,13 @@ export function loadVolcanoes() {
  * tags are the geology tags this evidence supports.
  */
 export async function caveEvidence(lat, lon) {
-  let list = [];
-  try { list = await loadVolcanoes(); } catch { /* volcano data unavailable */ }
-  return caveEvidenceSync(lat, lon, list);
+  const [list, tl] = await Promise.all([loadVolcanoes().catch(() => []), loadTubes().catch(() => [])]);
+  return caveEvidenceSync(lat, lon, list, tl);
 }
 
-export function caveEvidenceSync(lat, lon, list) {
+export function caveEvidenceSync(lat, lon, list, tubeList = []) {
   let tube = null, td = Infinity;
-  for (const t of LAVA_TUBES) { const d = haversine(lat, lon, t.lat, t.lon); if (d < td) { td = d; tube = t; } }
+  for (const t of tubeList) { const d = haversine(lat, lon, t[0], t[1]); if (d < td) { td = d; tube = t; } }
   // Track the nearest volcano of each evidence class separately, so a closer but
   // weaker one (e.g. Pleistocene, rock type unknown) never masks stronger evidence.
   let near = null, nd = Infinity, eff = null, ed = Infinity, strong = null, sd = Infinity;
@@ -38,13 +44,13 @@ export function caveEvidenceSync(lat, lon, list) {
   }
   const vol = v => v && { name: v[2], type: v[3], basaltic: v[5], epoch: v[6] === 'H' ? 'Holocene' : 'Pleistocene', lat: v[0], lon: v[1] };
   let level = 'none', tags = [];
-  if (td <= 30) { level = 'confirmed'; tags = ['lavatube', 'basalt']; }
+  if (td <= TUBE_KM) { level = 'confirmed'; tags = ['lavatube', 'basalt']; }
   else if (sd <= 40) { level = 'likely'; tags = ['lavaprone', 'basalt']; }
   else if (ed <= 30) { level = 'possible'; tags = ['lavaprone']; }
   const shown = level === 'likely' ? strong : eff, shownKm = level === 'likely' ? sd : ed;
   return {
     level, tags,
-    tube: td <= 100 ? { ...tube, km: Math.round(td) } : null,
+    tube: td <= 100 ? { name: tube[2], ref: tube[3], lat: tube[0], lon: tube[1], km: Math.round(td) } : null,
     effusive: shown && shownKm <= 100 ? { ...vol(shown), km: Math.round(shownKm) } : null,
     nearest: near && nd <= 150 ? { ...vol(near), km: Math.round(nd) } : null,
   };
@@ -54,5 +60,5 @@ export const LEVEL_TEXT = {
   confirmed: 'Documented lava-tube cave nearby',
   likely: 'Lava tubes likely: young basaltic lava-flow volcano nearby',
   possible: 'Lava tubes possible: lava-flow volcano nearby, rock type unrecorded',
-  none: 'No cave evidence within 30–40 km',
+  none: `No cave evidence within ${TUBE_KM}–40 km`,
 };

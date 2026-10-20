@@ -358,7 +358,13 @@ function myCandidates() {
 // ---------------- Method ----------------
 export function renderMethod() {
   const el = document.getElementById('methodBody');
-  if (el.dataset.init) return; el.dataset.init = 1;
+  const ver = () => import('./updates.js').then(async u => {
+    const v = await u.currentVersion();
+    const line = document.getElementById('verLine');
+    if (line) line.textContent = v ? `You are using AnalogScope ${v}. New versions are detected automatically, and a pop-up lets you update in one tap.` : 'Version information appears once the app has been saved for offline use (reload once while online).';
+    document.getElementById('updBtn').onclick = () => u.checkForUpdates();
+  });
+  if (el.dataset.init) return ver(); el.dataset.init = 1;
   el.innerHTML = `<h1>How AnalogScope works</h1>
   <p class="lead">Planetary analog sites are places on Earth where crews and equipment can be tested before they fly. AnalogScope gives each place a 0–100 score for how well it represents eight Moon and Mars base or landing environments, shows the data behind the score, and searches large regions for analogs that have not been studied yet.</p>
   <h2>1. Targets</h2><p>${TARGETS.map(t => `<b>${esc(t.name)}</b> (${t.body === 'moon' ? 'Moon' : 'Mars'}): ${esc(t.short)}`).join(' · ')}.</p>
@@ -379,15 +385,18 @@ export function renderMethod() {
   <tr><td><a href="https://mars.nasa.gov/msl/weather/" target="_blank" rel="noopener">Curiosity REMS</a></td><td>NASA JPL / CAB (Spain)</td><td>Latest Mars weather at Gale Crater, and seasonal normals from the full archive</td></tr>
   <tr><td><a href="https://www.giss.nasa.gov/tools/mars24/" target="_blank" rel="noopener">Mars24 algorithm</a></td><td>NASA GISS</td><td>Current Mars season (Ls) and local solar time, computed on your device</td></tr>
   <tr><td><a href="https://volcano.si.edu/" target="_blank" rel="noopener">Volcanoes of the World</a></td><td>Smithsonian GVP</td><td>2,666 Holocene and Pleistocene volcanoes used as cave evidence (bundled for offline use)</td></tr>
+  <tr><td><a href="https://www.wikidata.org/wiki/Q27919" target="_blank" rel="noopener">Wikidata</a></td><td>Wikimedia (CC0)</td><td>60 documented lava-tube caves with exact coordinates, used as confirmed cave evidence (bundled)</td></tr>
   <tr><td><a href="https://eonet.gsfc.nasa.gov/" target="_blank" rel="noopener">EONET</a></td><td>NASA</td><td>Live natural events near sites</td></tr>
   <tr><td><a href="https://www.swpc.noaa.gov/" target="_blank" rel="noopener">SWPC</a></td><td>NOAA</td><td>Kp index and GOES X-ray flux</td></tr>
   <tr><td><a href="https://earthquake.usgs.gov/" target="_blank" rel="noopener">Earthquake feed</a></td><td>USGS</td><td>Seismic hazards near sites</td></tr>
   <tr><td><a href="https://api.nasa.gov/" target="_blank" rel="noopener">APOD, Image of the Day, Image Library</a></td><td>NASA</td><td>Daily picture (with automatic fallback) and archive photos of sites</td></tr></table>
   <h2>6. Limitations and how the app handles them</h2>
   <p><b>No Earth site reaches vacuum, Mars pressure or low gravity.</b> Scores therefore measure how close Earth can get. Each site report includes a “What no Earth site can reproduce” card that shows how far the site is from the real value and which lab facility covers the rest, such as vacuum chambers, Mars-pressure wind tunnels, gravity offload systems or radiation beamlines.</p>
-  <p><b>Satellites cannot see caves.</b> The cave targets use cave evidence instead: a list of documented lava tubes (full credit) and basaltic lava-flow volcanoes from the Smithsonian catalogue (half credit, labelled as inferred). Places with no evidence stay capped. You can also add geology you know from the field.</p>
+  <p><b>Satellites cannot see caves.</b> The cave targets use cave evidence instead. A documented lava tube within 30 km (60 caves with exact coordinates from Wikidata) counts as confirmed and gets full credit. A basaltic lava-flow volcano from the Smithsonian catalogue makes caves likely and gets half credit, labelled as inferred, because these are the settings where lava tubes form. Places with no evidence stay capped. You can also add geology you know from the field.</p>
   <p><b>Mars weather arrives in batches.</b> The Mars season and local times are computed live with NASA's Mars24 algorithm, and expected conditions come from the median of earlier Curiosity sols at the same season, so the card is current even when the newest rover report is weeks old.</p>
   <p><b>Grid data are coarse</b> (POWER cells are about 55 km across; scan terrain uses ≈1.2 km pixels, so slopes are smoother than in site reports), and geology tags summarise published studies. Terrain tiles use SRTM between 60°N and 56°S and coarser elevation models elsewhere, so polar relief is less detailed. Permits, access, safety and logistics are not modelled.</p>
   <h2>7. Privacy, security and offline use</h2><p>AnalogScope is a static, installable web app. There are no accounts, cookies, analytics or servers of ours: your browser requests data directly from each agency. A strict Content-Security-Policy limits the app to these sources. Settings and saved candidates stay on your device. A service worker stores the app, map tiles and the latest data so it keeps working in airplane mode, and it updates whenever you are back online.</p>
-  <h2>8. Definitions</h2><table>${Object.entries(VARIABLES).map(([k, v]) => `<tr><td><b>${esc(v.label)}</b></td><td>${esc(v.unit)}</td><td>${esc(v.src)}</td></tr>`).join('')}</table>`;
+  <h2>8. Version and updates</h2><p id="verLine">Checking version…</p><p><button class="btn" id="updBtn" type="button">Check for updates</button></p>
+  <h2>9. Definitions</h2><table>${Object.entries(VARIABLES).map(([k, v]) => `<tr><td><b>${esc(v.label)}</b></td><td>${esc(v.unit)}</td><td>${esc(v.src)}</td></tr>`).join('')}</table>`;
+  ver();
 }

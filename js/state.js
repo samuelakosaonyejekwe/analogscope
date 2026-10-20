@@ -58,11 +58,23 @@ export function toast(msg, ms = 2800) {
   clearTimeout(toastT); toastT = setTimeout(() => el.classList.remove('show'), ms);
 }
 
-export function dialog(title, html) {
-  const d = document.getElementById('dlg');
+/**
+ * Modal dialog. actions: [{ label, primary, onClick }]; every button closes the dialog,
+ * then runs its onClick. Defaults to a single "Got it" button.
+ */
+export function dialog(title, html, actions = [{ label: 'Got it', primary: true }]) {
+  const d = document.getElementById('dlg'), bar = document.getElementById('dlgActions');
   document.getElementById('dlgTitle').textContent = title;
   document.getElementById('dlgBody').innerHTML = html;
-  if (typeof d.showModal === 'function') d.showModal(); else d.setAttribute('open', '');
+  bar.replaceChildren(...actions.map(a => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'btn' + (a.primary ? ' btn-primary' : ''); b.textContent = a.label;
+    b.onclick = () => { d.close?.(); d.removeAttribute('open'); a.onClick?.(); };
+    return b;
+  }));
+  if (typeof d.showModal === 'function') { if (!d.open) d.showModal(); } else d.setAttribute('open', '');
+  bar.querySelector('.btn-primary')?.focus({ preventScroll: true });
+  document.querySelector('#dlg .dlg-inner').scrollTop = 0;
 }
 
 export const fmt = (v, dp = 1) => (v == null || !isFinite(v) ? '–' : Number(v).toLocaleString(undefined, { maximumFractionDigits: dp, minimumFractionDigits: 0 }));

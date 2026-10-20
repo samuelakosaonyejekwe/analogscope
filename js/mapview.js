@@ -6,8 +6,7 @@ import { evaluate } from './engine.js';
 import { live } from './data.js';
 import { scan, scanBox } from './scan.js';
 import { esc, safeUrl } from './charts.js';
-import { loadVolcanoes } from './evidence.js';
-import { LAVA_TUBES } from './lavatubes.js';
+import { loadVolcanoes, loadTubes } from './evidence.js';
 
 const yesterday = () => new Date(Date.now() - 864e5).toISOString().slice(0, 10);
 const GIBS = 'https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/';
@@ -191,8 +190,8 @@ async function drawVolcanoes() {
       .addTo(volcLayer);
   }
 }
-function drawTubes() {
+async function drawTubes() {
   if (tubeLayer.getLayers().length) return;
-  for (const t of LAVA_TUBES) L.circleMarker([t.lat, t.lon], { radius: 6, weight: 2, color: '#fff', fillColor: '#8b5cf6', fillOpacity: 0.9, bubblingMouseEvents: false })
-    .bindTooltip(`<b>${esc(t.n)}</b><br>${esc(t.r)}<br>Documented lava-tube cave`).addTo(tubeLayer);
+  for (const t of await loadTubes().catch(() => [])) L.circleMarker([t[0], t[1]], { radius: 6, weight: 2, color: '#fff', fillColor: '#8b5cf6', fillOpacity: 0.9, bubblingMouseEvents: false })
+    .bindTooltip(`<b>${esc(t[2])}</b><br>Documented lava-tube cave (Wikidata ${esc(t[3])})`).addTo(tubeLayer);
 }

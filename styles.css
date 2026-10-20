@@ -262,8 +262,8 @@ dialog::backdrop { background: rgba(3,6,14,.6); backdrop-filter: blur(3px); }
   :root { --top: 52px; --nav: 60px; }
   body { font-size: 14.5px; }
   .brand small { display: none; }
-  .btn-install span { display: none; }
-  .btn-install { padding: 8px 10px; }
+  .btn-install span { font-size: 13px; }
+  .btn-install { padding: 7px 10px; gap: 4px; }
   .pill { font-size: 11px; padding: 3px 8px; }
   .tabs { top: auto; bottom: 0; height: calc(var(--nav) + var(--safe-b)); padding: 0 0 var(--safe-b); border-top: 1px solid var(--line); border-bottom: 0; justify-content: space-around; gap: 0; }
   .tabs a { flex-direction: column; justify-content: center; gap: 2px; font-size: 11px; padding: 0 6px; border-bottom: 0; border-top: 2px solid transparent; flex: 1; }
@@ -299,6 +299,7 @@ dialog::backdrop { background: rgba(3,6,14,.6); backdrop-filter: blur(3px); }
   .brand img { width: 28px; height: 28px; }
   .page .ctl-row { flex-wrap: wrap; }
 }
+@media (max-width: 369px) { .btn-install span { font-size: 12px; } .btn-install { padding: 6px 8px; } .btn-install svg { width: 16px; height: 16px; } }
 @media (max-width: 520px) {
   .pill { font-size: 0; padding: 0; width: 12px; height: 12px; border: 0; background: var(--muted); }
   .pill.on { background: var(--ok); } .pill.off { background: var(--warn); }
@@ -345,3 +346,17 @@ dialog::backdrop { background: rgba(3,6,14,.6); backdrop-filter: blur(3px); }
   .brand span { display: none; }
   .pg { padding: 12px; } .pg span { font-size: 14px; }
 }
+
+/* ---------- install centre ---------- */
+#dlg { width: min(720px, calc(100vw - 24px)); }
+.install-grid { display: grid; grid-template-columns: 1fr 190px; gap: 14px; align-items: start; }
+.install-grid > * { min-width: 0; }
+#dlg .btn { white-space: normal; text-align: left; }
+#dlg .dlg-inner { overflow-x: hidden; overflow-wrap: anywhere; }
+.qr { text-align: center; background: var(--card2); border: 1px solid var(--line); border-radius: 14px; padding: 10px; }
+.qr img { display: block; margin: 0 auto 6px; background: #fff; border-radius: 8px; padding: 6px; }
+.qr small { color: var(--muted); font-size: 12px; display: block; }
+details.plat { border: 1px solid var(--line); border-radius: 12px; padding: 8px 12px; margin-bottom: 8px; background: var(--card2); }
+details.plat summary { cursor: pointer; list-style-position: inside; }
+details.plat .steps { margin: 6px 0 2px; }
+@media (max-width: 600px) { .install-grid { grid-template-columns: 1fr; } .qr { order: -1; } }

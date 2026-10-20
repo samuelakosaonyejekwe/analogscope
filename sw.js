@@ -1,5 +1,13 @@
 // AnalogScope service worker: offline app shell, cached map tiles and the latest live data.
-const VERSION = 'v1.2.0';
+const VERSION = 'v1.3.0';
+// Shown in the "Update available" pop-up. Keep it short and user-facing.
+const NOTES = [
+  'Update pop-up: new versions now ask before reloading, and show what changed',
+  'Install centre with steps for every phone, tablet and computer, plus a QR code',
+  'Firefox can now install AnalogScope on Windows and Linux',
+  '60 documented lava-tube caves with exact coordinates from Wikidata',
+  'Live data refreshes in the background more reliably',
+];
 const SHELL = `as-shell-${VERSION}`;
 const TILES = 'as-tiles-v1';
 const DATA = 'as-data-v1';
@@ -10,11 +18,11 @@ const MAX_TILES = 3000;
 const ASSETS = [
   './', 'index.html', 'styles.css', 'manifest.webmanifest',
   'js/app.js', 'js/state.js', 'js/data.js', 'js/engine.js', 'js/targets.js', 'js/sites.js', 'js/scan.js',
-  'js/charts.js', 'js/mapview.js', 'js/report.js', 'js/pages.js', 'js/install.js', 'js/evidence.js', 'js/lavatubes.js', 'js/mars.js',
+  'js/charts.js', 'js/mapview.js', 'js/report.js', 'js/pages.js', 'js/install.js', 'js/updates.js', 'js/evidence.js', 'js/mars.js',
   'vendor/leaflet/leaflet.js', 'vendor/leaflet/leaflet.css',
   'vendor/leaflet/images/layers.png', 'vendor/leaflet/images/layers-2x.png', 'vendor/leaflet/images/marker-icon.png',
   'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/maskable-512.png', 'icons/apple-touch-icon.png',
-  'data/snapshot.json', 'data/volcanoes.json', 'icons/favicon.ico',
+  'data/snapshot.json', 'data/volcanoes.json', 'data/lavatubes.json', 'icons/favicon.ico', 'icons/qr.svg',
 ];
 const JAXA_LIB = 'https://data.earth.jaxa.jp/api/javascript/v1.2.3/jaxa.earth.esm.js';
 const TILE_HOSTS = ['gibs.earthdata.nasa.gov', 'trek.nasa.gov', 'tiles.maps.eox.at', 's3.amazonaws.com'];
@@ -33,7 +41,11 @@ self.addEventListener('install', e => {
     // Bypass the HTTP cache so a new version never precaches stale copies.
     await c.addAll(ASSETS.map(u => new Request(u, { cache: 'reload' })));
     try { const l = await caches.open(LIB); if (!(await l.match(JAXA_LIB))) await l.add(new Request(JAXA_LIB, { mode: 'cors' })); } catch { /* fetched later */ }
-    await self.skipWaiting();
+    // First install: take over at once. Updates wait until the user accepts the
+    // pop-up, except over versions released before the pop-up existed (≤ 1.2),
+    // whose pages cannot show it.
+    const legacy = (await caches.keys()).some(k => /^as-shell-v1\.[0-2]\./.test(k));
+    if (!self.registration.active || legacy) await self.skipWaiting();
   })());
 });
 
@@ -135,9 +147,18 @@ self.addEventListener('fetch', e => {
 // (installed Chromium apps); other browsers refresh whenever the app is opened.
 async function refreshFeeds() {
   const c = await caches.open(DATA);
-  await Promise.allSettled(FEEDS.map(u => fetch(u, { mode: 'cors' }).then(r => r.ok && c.put(u, r))));
+  // no-store: go to the agency, not the browser's HTTP cache, so the copy is really new.
+  await Promise.allSettled(FEEDS.map(u => fetch(u, { mode: 'cors', cache: 'no-store' }).then(r => r.ok && c.put(u, r))));
 }
 self.addEventListener('periodicsync', e => { if (e.tag === 'refresh-live') e.waitUntil(refreshFeeds()); });
+
+// The app asks for a refresh each time it starts, so offline copies are current in
+// every browser, not only where Periodic Background Sync exists.
+self.addEventListener('message', e => {
+  if (e.data === 'refresh-live') e.waitUntil(refreshFeeds());
+  else if (e.data === 'skip-waiting') self.skipWaiting();
+  else if (e.data === 'info') e.ports[0]?.postMessage({ version: VERSION, notes: NOTES });
+});
 
 // Offline map pack: the page sends the tile list; the worker downloads it straight into
 // the pack cache (its own fetches skip the tile handler, so nothing is stored twice)

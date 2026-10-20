@@ -339,8 +339,9 @@ async function nasaPicture(key) {
 export async function live(name, arg, maxAgeMs = 0) {
   const k = 'f:' + name + (arg ? ':' + arg : '');
   const c = store.get(k);
-  // A recent copy counts as live while online; offline it is labelled as a saved copy.
-  if (c && ((maxAgeMs && Date.now() - c.t < maxAgeMs) || !navigator.onLine)) return { data: c.data, t: c.t, cached: !navigator.onLine };
+  // A recent copy is reused while online. Offline, the request still goes to the
+  // service worker, whose cache may hold a newer copy from a background refresh.
+  if (c && maxAgeMs && navigator.onLine && Date.now() - c.t < maxAgeMs) return { data: c.data, t: c.t, cached: false };
   try {
     const data = await feeds[name](arg);
     const slim = slimFeed(name, data);
@@ -349,7 +350,7 @@ export async function live(name, arg, maxAgeMs = 0) {
       return { data: slim, t: data.__cachedAt, cached: true };
     }
     store.set(k, { t: Date.now(), data: slim });
-    return { data: slim, t: Date.now(), cached: false };
+    return { data: slim, t: Date.now(), cached: !navigator.onLine };
   } catch (e) {
     if (c) return { data: c.data, t: c.t, cached: true, error: e.message };
     throw e;

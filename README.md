@@ -35,8 +35,15 @@ been studied yet, and works offline once installed.
   NASA Image of the Day as a fallback).
 - **Navigation**: clean URLs (`#/rankings`, `#/twin`, `#/live`, `#/method`), back and forward
   arrows, previous/next page cards, and shareable links to any site or point.
+- **Install centre**: the always-visible **Install app** button opens one-tap install where the
+  browser offers it, step-by-step guidance for Android, iPhone/iPad, Windows, Mac, Linux and
+  Chromebook, a QR code to open the app on a phone, and an offline-readiness check.
+- **Update pop-up**: new versions are detected at launch, every 30 minutes and when the app returns
+  to the foreground. A pop-up shows what's new and updates in one tap. The version number and a
+  *Check for updates* button are on the Method page.
 - **Installable and offline**: a PWA for Android, iPhone and iPad, Windows, macOS, Linux and
-  ChromeOS. Desktop Firefox, which cannot install web apps, gets a one-click desktop shortcut.
+  ChromeOS. Firefox installs it on Windows (143+, “Add tab to taskbar”) and on Linux once
+  `browser.taskbarTabs.enabled` is on; Firefox on macOS gets a one-click desktop shortcut.
   The app works in airplane mode, and an offline map pack (about 12 MB) can be saved before
   travelling.
 
@@ -58,6 +65,7 @@ and needs no API keys.
 | Curiosity REMS weather | NASA JPL / CAB | Mars weather and seasonal normals |
 | Mars24 algorithm | NASA GISS | Mars season and local time (computed on the device) |
 | Volcanoes of the World | Smithsonian GVP | Cave evidence (bundled) |
+| Wikidata lava tubes | Wikimedia (CC0) | 60 documented lava-tube caves (bundled) |
 | EONET, APOD, Image of the Day, Image Library | NASA | Events and imagery |
 | SWPC | NOAA | Space weather |
 | Earthquake feed | USGS | Seismic hazards |
@@ -73,8 +81,8 @@ AFS  = (1 − g)·EAI + g·GCS                g = 0.35 (0.6 for cave targets)
 
 JAXA layers are monthly normals; annual values are the mean of January, April, July and
 October, to match POWER's annual normals. Cave targets cannot be judged from climate alone.
-They use cave evidence: documented lava tubes count in full, and basaltic lava-flow volcanoes
-get half credit. Without evidence, the score is capped. The in-app **Method** page documents
+They use cave evidence: documented lava tubes (Wikidata) count in full, and basaltic lava-flow
+volcanoes (Smithsonian) get half credit. Without evidence, the score is capped. The in-app **Method** page documents
 every factor, weight, source and limitation.
 
 ## Run locally
@@ -91,10 +99,12 @@ python3 -m http.server 8080      # then visit http://localhost:8080
 |---|---|---|
 | `data/snapshot.json` | `tools/build_snapshot.mjs` | The app's own data layer, run in a headless browser |
 | `data/volcanoes.json` | `tools/build_volcanoes.py` | Smithsonian GVP WFS exports (Holocene and Pleistocene) |
+| `data/lavatubes.json` | `tools/build_lavatubes.py` | Wikidata SPARQL queries plus `tools/lavatubes_extra.json` (each with a Wikidata ID) |
 
 ```
 cd tools && npm install && npx playwright install chromium && npm run snapshot
 python3 tools/build_volcanoes.py holocene.json pleistocene.json data/volcanoes.json
+python3 tools/build_lavatubes.py
 ```
 
 ## Project layout
@@ -102,10 +112,10 @@ python3 tools/build_volcanoes.py holocene.json pleistocene.json data/volcanoes.j
 ```
 index.html, styles.css, sw.js, manifest.webmanifest
 js/      app (routing), state, data (API layer), engine (scoring), scan (discovery),
-         evidence (caves), mars (Mars24 + REMS), targets, sites, lavatubes,
+         evidence (caves), mars (Mars24 + REMS), targets, sites,
          mapview, report, pages, charts, install
-data/    snapshot.json, volcanoes.json
-tools/   build_snapshot.mjs, build_volcanoes.py
+data/    snapshot.json, volcanoes.json, lavatubes.json
+tools/   build_snapshot.mjs, build_volcanoes.py, build_lavatubes.py
 vendor/  Leaflet 1.9.4
 icons/   app icons and store screenshots
 ```

@@ -4,7 +4,7 @@
 
 import { powerRegional, jaxaRegion, terrainAt, haversine } from './data.js';
 import { environmental, evaluate } from './engine.js';
-import { loadVolcanoes, caveEvidenceSync } from './evidence.js';
+import { loadVolcanoes, loadTubes, caveEvidenceSync } from './evidence.js';
 import { SITES } from './sites.js';
 
 /** A candidate this far from every documented site is labelled as new. */
@@ -78,7 +78,7 @@ export async function scan(target, box, { mission = 'balanced', onProgress = () 
 
   // 4. Score land cells. Cave targets also use cave evidence (volcanoes and documented tubes).
   const caveTarget = (target.geoWeight ?? 0) >= 0.5;
-  const vols = caveTarget ? await loadVolcanoes().catch(() => []) : null;
+  const [vols, tubes] = caveTarget ? await Promise.all([loadVolcanoes().catch(() => []), loadTubes().catch(() => [])]) : [null, null];
   const scored = [];
   for (const c of list) {
     // Land cover decides when it is known (so below-sea-level land such as Death Valley
@@ -88,7 +88,7 @@ export async function scan(target, box, { mission = 'balanced', onProgress = () 
     const e = environmental(target, c.vals, mission);
     if (e.score == null) continue;
     let score = Math.round(e.score * 100), cave = null;
-    if (caveTarget) { cave = caveEvidenceSync(c.lat, c.lon, vols); score = evaluate(target, c.vals, [], mission, cave.tags).score; }
+    if (caveTarget) { cave = caveEvidenceSync(c.lat, c.lon, vols, tubes); score = evaluate(target, c.vals, [], mission, cave.tags).score; }
     scored.push({ ...c, score, coverage: e.coverage, cave: cave?.level });
   }
 

@@ -223,13 +223,13 @@ function act(a, place, p, ev) {
 function evidenceHtml(e) {
   if (!e) return '';
   const lines = [];
-  if (e.tube) lines.push(`Documented lava tube: <b>${esc(e.tube.n)}</b> (${esc(e.tube.r)}), ${e.tube.km} km away`);
+  if (e.tube) lines.push(`Documented lava tube: <b>${esc(e.tube.name)}</b>, ${e.tube.km} km away${/^Q\d+$/.test(e.tube.ref) ? ` (<a href="https://www.wikidata.org/wiki/${e.tube.ref}" target="_blank" rel="noopener">Wikidata ${e.tube.ref}</a>)` : ''}`);
   if (e.effusive) lines.push(`Nearest lava-flow volcano: <b>${esc(e.effusive.name)}</b> (${esc(e.effusive.type)}${e.effusive.basaltic === 1 ? ', basaltic' : ''}, ${esc(e.effusive.epoch)}), ${e.effusive.km} km away`);
   else if (e.nearest) lines.push(`Nearest volcano: <b>${esc(e.nearest.name)}</b> (${esc(e.nearest.type)}), ${e.nearest.km} km away`);
   const cls = e.level === 'confirmed' ? 'ok' : e.level === 'none' ? 'muted' : 'warn';
   return `<div style="margin-top:10px;font-size:13px"><b>Cave evidence:</b> <span class="${cls}">${esc(LEVEL_TEXT[e.level])}</span>
     ${lines.length ? `<ul class="list" style="margin-top:4px">${lines.map(l => `<li><span class="dot" style="background:var(--accent)"></span><span>${l}</span></li>`).join('')}</ul>` : ''}
-    <div class="muted" style="font-size:11.5px;margin-top:2px">Sources: Smithsonian Global Volcanism Program (2,666 volcanoes) and a list of documented lava-tube caves. The cave targets use this evidence automatically.</div></div>`;
+    <div class="muted" style="font-size:11.5px;margin-top:2px">Sources: Smithsonian Global Volcanism Program (2,666 volcanoes) and documented lava-tube caves from Wikidata. A documented tube confirms caves; a volcano only makes them likely, so it gets half credit. The cave targets use this evidence automatically.</div></div>`;
 }
 
 export function gapsHtml(t, p, ev) {

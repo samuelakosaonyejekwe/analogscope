@@ -6,6 +6,7 @@ import { initMap, setBase, drawSites, drawCandidates, legend, showPoint, clearPo
 import { renderReport } from './report.js';
 import { renderRank, renderTwin, renderLive, renderMethod, renderScanPanel } from './pages.js';
 import { initInstall } from './install.js';
+import { initUpdates } from './updates.js';
 import { esc } from './charts.js';
 
 const $ = id => document.getElementById(id);
@@ -213,22 +214,6 @@ function intro() {
   set({ seenIntro: true });
 }
 
-// ---------- service worker ----------
-function registerSW() {
-  if (!('serviceWorker' in navigator)) return;
-  navigator.serviceWorker.register('sw.js').then(reg => {
-    reg.addEventListener('updatefound', () => {
-      const nw = reg.installing;
-      nw?.addEventListener('statechange', () => {
-        if (nw.state === 'installed' && navigator.serviceWorker.controller) toast('A new version is ready and will load next time you open the app.', 5000);
-      });
-    });
-    // Periodic background refresh of live feeds where supported (installed Chromium apps).
-    if ('periodicSync' in reg) navigator.permissions?.query({ name: 'periodic-background-sync' }).then(s => { if (s.state === 'granted') reg.periodicSync.register('refresh-live', { minInterval: 6 * 3600e3 }).catch(() => {}); }).catch(() => {});
-    setInterval(() => reg.update().catch(() => {}), 3600e3);
-  }).catch(() => {});
-}
-
 // ---------- boot ----------
 (async function boot() {
   net();
@@ -252,7 +237,7 @@ function registerSW() {
   if (s && view === 'map') getMap().setView([s.lat, s.lon], 4);
   if (state.sel.kind === 'point') showPoint(state.sel.lat, state.sel.lon);
   if (!state.seenIntro) setTimeout(intro, 600);
-  registerSW();
+  initUpdates();
   // Keep live feeds warm while the app is open.
   setInterval(() => { if (navigator.onLine && view === 'live' && !document.hidden) renderLive(true, true); }, 15 * 6e4);
 })();
